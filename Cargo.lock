@@ -521,15 +521,14 @@ dependencies = [
 
 [[package]]
 name = "git2"
-version = "0.20.4"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b88256088d75a56f8ecfa070513a775dd9107f6530ef14919dac831af9cfe2b"
+checksum = "ddddbf932745a6be37109b6112d3ee09696106f848449069d3a57bba937ab82e"
 dependencies = [
  "bitflags",
  "libc",
  "libgit2-sys",
  "log",
- "url",
 ]
 
 [[package]]
@@ -701,14 +700,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "subtle",
- "thiserror 2.0.18",
+ "thiserror",
  "url",
 ]
 
 [[package]]
 name = "io-http"
 version = "0.0.3"
-source = "git+https://github.com/pimalaya/io-http#c8833e8c4c72f6e87f6d2a0e3b907e657384e197"
+source = "git+https://github.com/pimalaya/io-http#812d8a30891631e49c70722555eefecaa0033458"
 dependencies = [
  "anyhow",
  "base64",
@@ -717,7 +716,7 @@ dependencies = [
  "memchr",
  "pimalaya-stream",
  "secrecy",
- "thiserror 2.0.18",
+ "thiserror",
  "url",
 ]
 
@@ -769,7 +768,7 @@ dependencies = [
  "jni-sys",
  "log",
  "simd_cesu8",
- "thiserror 2.0.18",
+ "thiserror",
  "walkdir",
  "windows-link",
 ]
@@ -1039,7 +1038,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-cli"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/cli#4be5cd77455111e482ddbd9d93f4e19723623798"
+source = "git+https://github.com/pimalaya/cli#c3ead3ae2dd74d98e5a695bc476d74399d7a6c0b"
 dependencies = [
  "anyhow",
  "clap",
@@ -1058,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "pimalaya-stream"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/stream#c617b781119cb5826f0c5ac805de091d4fb4c686"
+source = "git+https://github.com/pimalaya/stream#4a28a3c051bdc31e65a3fbbeb7f33b8aaebaca7b"
 dependencies = [
  "anyhow",
  "log",
@@ -1158,7 +1157,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.17",
  "libredox",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -1383,14 +1382,14 @@ dependencies = [
 
 [[package]]
 name = "serde-xml-rs"
-version = "0.7.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6560602b989198ebb381e3192c86970116b3b2e13b8b8a39d6d0850e40b6b81"
+checksum = "cc2215ce3e6a77550b80a1c37251b7d294febaf42e36e21b7b411e0bf54d540d"
 dependencies = [
  "log",
  "serde",
- "thiserror 1.0.69",
- "xml-rs",
+ "thiserror",
+ "xml",
 ]
 
 [[package]]
@@ -1548,31 +1547,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.18",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -1693,7 +1672,6 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
- "serde",
 ]
 
 [[package]]
@@ -2026,10 +2004,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
-name = "xml-rs"
-version = "0.8.28"
+name = "xml"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
+checksum = "636f85e5ca6488e96401b61eb7de54f4e44755c988af0f52cf90230c312a1a89"
 
 [[package]]
 name = "yoke"
