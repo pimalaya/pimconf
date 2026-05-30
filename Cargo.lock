@@ -707,7 +707,7 @@ dependencies = [
 [[package]]
 name = "io-http"
 version = "0.0.3"
-source = "git+https://github.com/pimalaya/io-http#fa48ce0a72c44144567f4a08d51b2b454de7be9a"
+source = "git+https://github.com/pimalaya/io-http#73b264b85209d86de48afed25957ab582b54c272"
 dependencies = [
  "anyhow",
  "base64",
@@ -1038,7 +1038,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-cli"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/cli#b4078bd986685fdd0193e7fe5a383d02defc2bc5"
+source = "git+https://github.com/pimalaya/cli#8ee488f8701b9e4a5bb29dbcbc051b399b78e5c6"
 dependencies = [
  "anyhow",
  "clap",
@@ -1057,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "pimalaya-stream"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/stream#55bbb1cbf929effdc131573724017b86450a6ddd"
+source = "git+https://github.com/pimalaya/stream#6449136364c9ef81248e3b4ab6491dd154293481"
 dependencies = [
  "anyhow",
  "log",
