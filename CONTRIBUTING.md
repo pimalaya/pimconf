@@ -33,7 +33,7 @@ cargo test
 ## Override dependencies
 
 All Pimalaya crates use `[patch.crates-io]` to point to sibling directories.
-If you want to build io-discovery against a locally modified dependency (e.g. `io-http`), add the following to `Cargo.toml`:
+If you want to build pimconf against a locally modified dependency (e.g. `io-http`), add the following to `Cargo.toml`:
 
 ```toml
 [patch.crates-io]

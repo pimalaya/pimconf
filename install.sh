@@ -9,7 +9,7 @@ die() {
 
 DESTDIR="${DESTDIR:-}"
 PREFIX="${PREFIX:-"$DESTDIR/usr/local"}"
-RELEASES_URL="https://github.com/pimalaya/io-discovery/releases"
+RELEASES_URL="https://github.com/pimalaya/pimconf/releases"
 
 binary=discover
 system=$(uname -s | tr [:upper:] [:lower:])

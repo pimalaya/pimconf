@@ -7,15 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.1] - Unreleased
-
 ### Added
 
 - Added rfc6764 SRV-based CalDAV/CardDAV discovery.
-
-## [0.1.0]
-
-### Added
 
 - Added Thunderbird Autoconfig support (requires `autoconfig` feature).
 
@@ -27,4 +21,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added CLI (requires `cli` feature).
 
-[unreleased]: https://github.com/pimalaya/io-discovery/compare/root..HEAD
+[unreleased]: https://github.com/pimalaya/pimconf/compare/root..HEAD

@@ -1,6 +1,6 @@
-# I/O Discovery [![Documentation](https://img.shields.io/docsrs/io-discovery?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/io-discovery/latest/io_discovery) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 🪄 Pimconf [![Documentation](https://img.shields.io/docsrs/pimconf?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/pimconf/latest/pimconf) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-Client library and CLI to discover PIM-related services, written in Rust.
+CLI and lib to discover PIM-related services, written in Rust.
 
 This repository ships three things:
 
@@ -43,13 +43,13 @@ This repository ships three things:
 - **JSON** output via `--json`
 
 > [!TIP]
-> io-discovery is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
+> pimconf is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
 
 ## Installation
 
 ### Pre-built binary
 
-The CLI binary `discover` has not been officially released yet. Check the [releases](https://github.com/pimalaya/io-discovery/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
+The CLI binary `discover` has not been officially released yet. Check the [releases](https://github.com/pimalaya/pimconf/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
 
 > [!NOTE]
 > Pre-built binaries are built with the default cargo features, plus `cli`. If you need more features, please use another installation method.
@@ -57,20 +57,20 @@ The CLI binary `discover` has not been officially released yet. Check the [relea
 ### Cargo
 
 ```sh
-cargo install io-discovery --locked
+cargo install pimconf --locked
 ```
 
 You can also use the git repository for a more up-to-date (but less stable) version:
 
 ```sh
-cargo install --locked --git https://github.com/pimalaya/io-discovery.git
+cargo install --locked --git https://github.com/pimalaya/pimconf.git
 ```
 
-To use io-discovery as a library, add it to your Cargo.toml:
+To use pimconf as a library, add it to your Cargo.toml:
 
 ```toml
 [dependencies]
-io-discovery = { version = "0.0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "client"] }
+pimconf = { version = "0.0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "client"] }
 ```
 
 The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186`) for a `no_std`-friendly, pure-coroutine build.
@@ -80,20 +80,20 @@ The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any 
 If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
 
 ```sh
-nix profile install github:pimalaya/io-discovery
+nix profile install github:pimalaya/pimconf
 ```
 
 Or run without installing:
 
 ```sh
-nix run github:pimalaya/io-discovery -- autoconfig <local-part> <domain>
+nix run github:pimalaya/pimconf -- autoconfig <local-part> <domain>
 ```
 
 ### Sources
 
 ```sh
-git clone https://github.com/pimalaya/io-discovery
-cd io-discovery
+git clone https://github.com/pimalaya/pimconf
+cd pimconf
 nix run
 ```
 
@@ -105,7 +105,7 @@ Using a low-level DNS MX I/O-free coroutine:
 
 ```rust,ignore
 use std::{io::{Read, Write}, net::TcpStream};
-use io_discovery::autoconfig::mx::{DiscoveryDnsMx, DiscoveryDnsMxResult};
+use pimconf::autoconfig::mx::{DiscoveryDnsMx, DiscoveryDnsMxResult};
 use url::Url;
 
 let resolver = Url::parse("tcp://1.1.1.1:53").unwrap();
@@ -136,7 +136,7 @@ for record in records {
 Using a mid-level std PACC client:
 
 ```rust,ignore
-use io_discovery::pacc::client::DiscoveryPaccClientStd;
+use pimconf::pacc::client::DiscoveryPaccClientStd;
 use pimalaya_stream::tls::Tls;
 use url::Url;
 

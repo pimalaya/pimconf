@@ -1,6 +1,6 @@
 [package]
-name = "io-discovery"
-description = "Client library and CLI to discover PIM-related services"
+name = "pimconf"
+description = "CLI and lib to discover PIM-related services"
 version = "0.1.0"
 authors = ["soywod <pimalaya.org@posteo.net>"]
 rust-version = "1.87"
@@ -9,15 +9,15 @@ license = "MIT OR Apache-2.0"
 categories = ["network-programming", "no-std"]
 keywords = ["autoconfig", "io-free", "coroutine", "no-std", "pacc"]
 homepage = "https://pimalaya.org"
-documentation = "https://docs.rs/io-discovery/latest/io_discovery"
-repository = "https://github.com/pimalaya/io-discovery"
+documentation = "https://docs.rs/pimconf/latest/pimconf"
+repository = "https://github.com/pimalaya/pimconf"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["autoconfig", "pacc", "rfc6186", "rfc6764", "client", "rustls-ring"]
+default = ["rustls-ring", "autoconfig", "pacc", "rfc6186", "rfc6764"]
 client = ["dep:anyhow", "dep:io-http", "io-http/client", "dep:url"]
 stream = ["client", "dep:pimalaya-stream"]
 cli = ["dep:clap", "pimalaya-cli/terminal", "pimalaya-cli/table", "stream"]
@@ -37,6 +37,11 @@ codegen-units = 1
 strip = "symbols"
 panic = "abort"
 
+[[bin]]
+name = "pimconf"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [[example]]
 name = "autoconfig-mx"
 path = "examples/autoconfig_mx.rs"
@@ -46,11 +51,6 @@ required-features = ["autoconfig"]
 name = "pacc-client"
 path = "examples/pacc_client.rs"
 required-features = ["pacc", "client"]
-
-[[bin]]
-name = "discover"
-path = "src/main.rs"
-required-features = ["cli"]
 
 [build-dependencies]
 pimalaya-cli = { version = "0.0.1", default-features = false, features = ["build"], optional = true }

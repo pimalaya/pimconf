@@ -2,14 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
-#[cfg(feature = "autoconfig")]
-use io_discovery::autoconfig::cli::AutoconfigCommand;
-#[cfg(feature = "pacc")]
-use io_discovery::pacc::cli::PaccCommand;
-#[cfg(feature = "rfc6186")]
-use io_discovery::rfc6186::cli::SrvCommand;
-#[cfg(feature = "rfc6764")]
-use io_discovery::rfc6764::cli::Rfc6764Command;
 use pimalaya_cli::{
     clap::{
         args::{JsonFlag, LogFlags},
@@ -21,6 +13,14 @@ use pimalaya_cli::{
     printer::{Printer, StdoutPrinter},
 };
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
+#[cfg(feature = "autoconfig")]
+use pimconf::autoconfig::cli::AutoconfigCommand;
+#[cfg(feature = "pacc")]
+use pimconf::pacc::cli::PaccCommand;
+#[cfg(feature = "rfc6186")]
+use pimconf::rfc6186::cli::SrvCommand;
+#[cfg(feature = "rfc6764")]
+use pimconf::rfc6764::cli::Rfc6764Command;
 
 fn main() {
     let cli = Cli::parse();

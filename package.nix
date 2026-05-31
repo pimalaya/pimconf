@@ -31,7 +31,7 @@ rustPlatform.buildRustPackage {
   src = fetchFromGitHub {
     inherit hash;
     owner = "pimalaya";
-    repo = "io-discovery";
+    repo = "pimconf";
     rev = "v${version}";
   };
 
@@ -77,7 +77,7 @@ rustPlatform.buildRustPackage {
   meta = rec {
     description = "Client library and CLI to discover PIM-related services, written in Rust";
     mainProgram = "discover";
-    homepage = "https://github.com/pimalaya/io-discovery";
+    homepage = "https://github.com/pimalaya/pimconf";
     changelog = "${homepage}/blob/v${version}/CHANGELOG.md";
     license = with lib.licenses; [
       mit

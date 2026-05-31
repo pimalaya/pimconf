@@ -15,7 +15,7 @@ use std::{
     net::TcpStream,
 };
 
-use io_discovery::{
+use pimconf::{
     autoconfig::mx::DiscoveryDnsMx,
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
 };

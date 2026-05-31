@@ -11,7 +11,7 @@
 //! coroutines, like [`crate::shared::http::HttpGet`], simply translate
 //! io-http's [`HttpSendYield`] into [`DiscoveryYield`]).
 //!
-//! Every io-discovery coroutine yields the same [`DiscoveryYield`]
+//! Every pimconf coroutine yields the same [`DiscoveryYield`]
 //! shape: each yielded step carries the [`Url`] of the endpoint the
 //! coroutine wants to talk to, so the std client driver can route the
 //! bytes to the correct stream via [`crate::shared::pool::StreamPool`].
@@ -38,7 +38,7 @@ pub enum DiscoveryCoroutineState<Y, R> {
     Complete(R),
 }
 
-/// Standard-shape io-discovery coroutine.
+/// Standard-shape pimconf coroutine.
 ///
 /// Implementors own their internal state machine and declare their
 /// per-step `Yield` plus a terminal `Return`. The driver pumps I/O
@@ -62,7 +62,7 @@ pub trait DiscoveryCoroutine {
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return>;
 }
 
-/// Standard I/O Yield for io-discovery coroutines.
+/// Standard I/O Yield for pimconf coroutines.
 ///
 /// Both variants carry the [`Url`] of the endpoint the coroutine wants
 /// to talk to so the driver can route bytes to the matching stream

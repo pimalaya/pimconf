@@ -683,28 +683,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-discovery"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "clap",
- "domain",
- "env_logger",
- "io-http",
- "log",
- "pimalaya-cli",
- "pimalaya-stream",
- "serde",
- "serde-xml-rs",
- "serde_json",
- "sha2",
- "subtle",
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "io-http"
 version = "0.0.3"
 source = "git+https://github.com/pimalaya/io-http#73b264b85209d86de48afed25957ab582b54c272"
@@ -850,9 +828,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.28"
+version = "1.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc3a226e576f50782b3305c5ccf458698f92798987f551c6a02efe8276721e22"
+checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
 dependencies = [
  "cc",
  "libc",
@@ -1067,6 +1045,28 @@ dependencies = [
  "secrecy",
  "serde",
  "uds_windows",
+ "url",
+]
+
+[[package]]
+name = "pimconf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "domain",
+ "env_logger",
+ "io-http",
+ "log",
+ "pimalaya-cli",
+ "pimalaya-stream",
+ "serde",
+ "serde-xml-rs",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "thiserror",
  "url",
 ]
 
