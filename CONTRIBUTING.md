@@ -1,11 +1,11 @@
 # Contributing guide
 
-Thank you for investing your time in contributing to the I/O Discovery project.
+Thank you for investing your time in contributing to pimconf.
 
 ## Development
 
 The development environment is managed by [Nix](https://nixos.org/download.html).
-Running `nix-shell` will spawn a shell with everything you need to get started with the lib.
+Running `nix develop` will spawn a shell with everything you need to get started with the lib.
 
 If you do not want to use Nix, you can either use [rustup](https://rust-lang.github.io/rustup/index.html):
 
@@ -42,4 +42,4 @@ io-http.path = "/path/to/io-http"
 
 ## Commit style
 
-I/O Discovery follows the [conventional commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary).
+pimconf follows the [conventional commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary).

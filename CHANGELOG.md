@@ -9,15 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added rfc6764 SRV-based CalDAV/CardDAV discovery.
-
 - Added Thunderbird Autoconfig support (requires `autoconfig` feature).
 
 - Added [PACC] support (requires `pacc` feature).
 
   [PACC]: https://www.ietf.org/archive/id/draft-ietf-mailmaint-pacc-02.html
 
-- Added RFC 6186 SRV discovery support (requires `rfc6186` feature).
+- Added [RFC 6186] SRV-based mail service discovery (requires `rfc6186` feature).
+
+  [RFC 6186]: https://datatracker.ietf.org/doc/html/rfc6186
+
+- Added [RFC 6764] SRV-based CalDAV/CardDAV discovery (requires `rfc6764` feature).
+
+  [RFC 6764]: https://datatracker.ietf.org/doc/html/rfc6764
 
 - Added CLI (requires `cli` feature).
 

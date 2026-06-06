@@ -21,6 +21,7 @@ This repository ships three things:
   - [CLI](#cli)
 - [FAQ](#faq)
 - [License](#license)
+- [AI disclosure](#ai-disclosure)
 - [Social](#social)
 - [Sponsoring](#sponsoring)
 
@@ -31,8 +32,10 @@ This repository ships three things:
   - Thunderbird ISPDB lookup
   - DNS MX-based retry against the MX target's parent domain
   - DNS TXT `mailconf=<URL>` redirect
-- **RFC 6186 SRV** discovery support (requires `rfc6186` feature):
+- **RFC 6186 SRV** mail service discovery <sup>[rfc6186](https://datatracker.ietf.org/doc/html/rfc6186)</sup> (requires `rfc6186` feature):
   - `_imap._tcp`, `_imaps._tcp`, `_submission._tcp` assembly into a single report
+- **RFC 6764 SRV** CalDAV/CardDAV discovery <sup>[rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)</sup> (requires `rfc6764` feature):
+  - `_caldav._tcp`, `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp` assembly into a single report
 - **PACC** discovery support <sup>[draft-ietf-mailmaint-pacc-02](https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02)</sup> (requires `pacc` feature):
   - Well-known JSON configuration fetch
   - SHA-256 digest verification against the `_ua-auto-config` TXT record
@@ -70,10 +73,10 @@ To use pimconf as a library, add it to your Cargo.toml:
 
 ```toml
 [dependencies]
-pimconf = { version = "0.0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "client"] }
+pimconf = { version = "0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "rfc6764", "client"] }
 ```
 
-The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186`) for a `no_std`-friendly, pure-coroutine build.
+The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186` / `rfc6764`) for a `no_std`-friendly, pure-coroutine build.
 
 ### Nix
 
@@ -105,7 +108,10 @@ Using a low-level DNS MX I/O-free coroutine:
 
 ```rust,ignore
 use std::{io::{Read, Write}, net::TcpStream};
-use pimconf::autoconfig::mx::{DiscoveryDnsMx, DiscoveryDnsMxResult};
+use pimconf::{
+    autoconfig::mx::DiscoveryDnsMx,
+    coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
+};
 use url::Url;
 
 let resolver = Url::parse("tcp://1.1.1.1:53").unwrap();
@@ -116,15 +122,15 @@ let mut arg: Option<&[u8]> = None;
 
 let records = loop {
     match coroutine.resume(arg.take()) {
-        DiscoveryDnsMxResult::Ok(records) => break records,
-        DiscoveryDnsMxResult::WantsWrite { bytes, .. } => {
+        DiscoveryCoroutineState::Complete(Ok(records)) => break records,
+        DiscoveryCoroutineState::Complete(Err(err)) => panic!("{err}"),
+        DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsWrite { bytes, .. }) => {
             stream.write_all(&bytes).unwrap();
         }
-        DiscoveryDnsMxResult::WantsRead { .. } => {
+        DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead { .. }) => {
             let n = stream.read(&mut buf).unwrap();
             arg = Some(&buf[..n]);
         }
-        DiscoveryDnsMxResult::Err(err) => panic!("{err}"),
     }
 };
 
@@ -171,6 +177,12 @@ Run RFC 6186 SRV discovery (top-level subcommand):
 
 ```sh
 pimconf srv fastmail.com
+```
+
+Run RFC 6764 CalDAV/CardDAV SRV discovery:
+
+```sh
+pimconf rfc6764 fastmail.com
 ```
 
 Run PACC discovery:
@@ -221,6 +233,22 @@ This project is licensed under either of:
 - [Apache License, Version 2.0](LICENSE-APACHE)
 
 at your option.
+
+## AI disclosure
+
+This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
+
+- **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+
+- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
+
+- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
+
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+
+- **Last reviewed**: 31/05/2026
 
 ## Social
 

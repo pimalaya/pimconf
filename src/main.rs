@@ -102,7 +102,7 @@ impl From<TlsFlags> for Tls {
             provider: flags.tls.map(Into::into),
             rustls: Rustls {
                 crypto: flags.rustls_crypto.map(Into::into),
-                alpn: Vec::new(),
+                alpn: vec!["http/1.1".into()],
             },
             cert: flags.tls_cert,
         }

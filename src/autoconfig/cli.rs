@@ -4,7 +4,7 @@ use std::{
     vec::Vec,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::{Args, Subcommand};
 use log::trace;
 use pimalaya_cli::{
@@ -36,9 +36,11 @@ use crate::{
 #[command(arg_required_else_help = true)]
 pub struct AutoconfigCommand {
     /// Local part of the email address (default-mode positional).
-    local_part: String,
+    /// Required when no subcommand is given; ignored otherwise.
+    local_part: Option<String>,
     /// Domain of the email address (default-mode positional).
-    domain: String,
+    /// Required when no subcommand is given; ignored otherwise.
+    domain: Option<String>,
     /// DNS resolver (`host:port`).
     #[arg(long, default_value = DNS_SERVER)]
     server: String,
@@ -53,29 +55,38 @@ impl AutoconfigCommand {
             return sub.execute(printer, tls);
         }
 
+        // Default mode: both positionals must be supplied. Clap declares
+        // them `Option` to coexist with the subcommand variants, so the
+        // emptiness check belongs here rather than in the parser.
+        let (Some(local_part), Some(domain)) = (self.local_part, self.domain) else {
+            bail!(
+                "Autoconfig default mode requires both <LOCAL_PART> and <DOMAIN>; \
+                 see `pimconf autoconfig --help` or pick a subcommand"
+            );
+        };
+
         let resolver = parse_resolver(&self.server)?;
         let mut client = DiscoveryAutoconfigClientStd::new(resolver).with_tls(tls.clone());
 
-        if let Some(config) = try_isps(&mut client, &self.local_part, &self.domain) {
+        if let Some(config) = try_isps(&mut client, &local_part, &domain) {
             return printer.out(config);
         }
 
-        if let Some(parent) = mx_parent(&mut client, &self.domain) {
-            if parent != self.domain {
+        if let Some(parent) = mx_parent(&mut client, &domain) {
+            if parent != domain {
                 trace!("re-trying ISPs against MX parent {parent}");
-                if let Some(config) = try_isps(&mut client, &self.local_part, &parent) {
+                if let Some(config) = try_isps(&mut client, &local_part, &parent) {
                     return printer.out(config);
                 }
             }
         }
 
-        if let Ok(url) = client.mailconf(&self.domain) {
+        if let Ok(url) = client.mailconf(&domain) {
             trace!("mailconf redirect to {url} not followed by this CLI; use `isp` against {url}");
         }
 
         Err(anyhow!(
-            "Autoconfig: no provider configuration found for `{}`",
-            self.domain
+            "Autoconfig: no provider configuration found for `{domain}`"
         ))
     }
 }

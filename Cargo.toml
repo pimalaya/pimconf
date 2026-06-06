@@ -63,7 +63,7 @@ anyhow = { version = "1", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 clap = { version = "4.4", features = ["derive", "wrap_help"], optional = true }
 domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
-io-http = { version = "0.0.3", default-features = false, optional = true }
+io-http = { version = "0.1", default-features = false, optional = true }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.0.1", default-features = false, optional = true }
 pimalaya-stream = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
@@ -75,14 +75,12 @@ subtle = { version = "2", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
 url = { version = "2.2", default-features = false, optional = true }
 
-# [patch.crates-io]
-# domain = { git = "https://github.com/soywod/domain", branch = "new-srv" }
+# [patch.crates-io] # local path
 # io-http.path = "../io-http"
 # pimalaya-cli.path = "../cli"
 # pimalaya-stream.path = "../stream"
 
-[patch.crates-io]
-domain = { git = "https://github.com/soywod/domain", branch = "new-srv" }
-io-http.git = "https://github.com/pimalaya/io-http"
-pimalaya-cli.git = "https://github.com/pimalaya/cli"
-pimalaya-stream.git = "https://github.com/pimalaya/stream"
+# [patch.crates-io] # remote git
+# io-http.git = "https://github.com/pimalaya/io-http"
+# pimalaya-cli.git = "https://github.com/pimalaya/cli"
+# pimalaya-stream.git = "https://github.com/pimalaya/stream"

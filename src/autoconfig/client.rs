@@ -111,7 +111,9 @@ impl DiscoveryAutoconfigClientStd {
 
     /// Bootstraps the pool with `http` / `https` factories backed by
     /// [`pimalaya_stream::std::stream::StreamStd`] using the given
-    /// `tls` profile. Gated by the `stream` feature.
+    /// `tls` profile. ALPN is read from `tls.rustls.alpn`; callers
+    /// typically pre-populate it with `["http/1.1"]`. Gated by the
+    /// `stream` feature.
     #[cfg(feature = "stream")]
     pub fn with_tls(mut self, tls: pimalaya_stream::tls::Tls) -> Self {
         self.pool = self.pool.with_http_factories(tls);
