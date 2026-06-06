@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-06
+
 ### Added
 
 - Added Thunderbird Autoconfig support (requires `autoconfig` feature).
@@ -25,4 +27,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added CLI (requires `cli` feature).
 
-[unreleased]: https://github.com/pimalaya/pimconf/compare/root..HEAD
+[unreleased]: https://github.com/pimalaya/pimconf/compare/v0.1.0..HEAD
+[0.1.0]: https://github.com/pimalaya/pimconf/compare/root..v0.1.0
