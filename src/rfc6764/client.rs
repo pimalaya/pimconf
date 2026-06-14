@@ -21,7 +21,8 @@ use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6764::{
         discover::{DiscoveryRfc6764, DiscoveryRfc6764Error},
-        types::Rfc6764Report,
+        resolve::{ResolveDav, ResolveDavError},
+        types::{DavService, Rfc6764Report},
     },
     shared::pool::{Stream, StreamPool},
 };
@@ -35,6 +36,9 @@ pub enum DiscoveryRfc6764ClientStdError {
     /// lookups.
     #[error(transparent)]
     Discovery(#[from] DiscoveryRfc6764Error),
+    /// The combined `domain -> context root` resolve coroutine failed.
+    #[error(transparent)]
+    Resolve(#[from] ResolveDavError),
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -72,6 +76,15 @@ impl DiscoveryRfc6764ClientStd {
         self
     }
 
+    /// Registers `http`/`https` pool factories backed by `tls`, so the
+    /// client can also run the `.well-known` probe in
+    /// [`resolve`](Self::resolve). SRV-only callers do not need this.
+    #[cfg(feature = "stream")]
+    pub fn with_tls(mut self, tls: pimalaya_stream::tls::Tls) -> Self {
+        self.pool = self.pool.with_http_factories(tls);
+        self
+    }
+
     /// Runs the four RFC 6764 SRV lookups (`_caldav._tcp`,
     /// `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp`) on
     /// `domain` and returns the best record per service.
@@ -79,13 +92,38 @@ impl DiscoveryRfc6764ClientStd {
         &mut self,
         domain: &str,
     ) -> Result<Rfc6764Report, DiscoveryRfc6764ClientStdError> {
-        let mut coroutine = DiscoveryRfc6764::new(domain, self.dns.clone());
+        let coroutine = DiscoveryRfc6764::new(domain, self.dns.clone());
+        self.run(coroutine)
+    }
+
+    /// Resolves `domain` to a CalDAV/CardDAV context root: runs the SRV
+    /// lookups, then follows the `.well-known` redirect on the best
+    /// origin. Falls back to `https://<domain>:443/` when no SRV record
+    /// is published. Requires [`with_tls`](Self::with_tls) so the pool
+    /// can open the HTTPS `.well-known` connection.
+    #[cfg(feature = "stream")]
+    pub fn resolve(
+        &mut self,
+        domain: &str,
+        service: DavService,
+    ) -> Result<Url, DiscoveryRfc6764ClientStdError> {
+        let coroutine = ResolveDav::new(domain, service, self.dns.clone());
+        self.run(coroutine)
+    }
+
+    /// Pumps any pimconf coroutine (`Yield = DiscoveryYield`) through
+    /// the stream pool until completion.
+    fn run<C, T, E>(&mut self, mut coroutine: C) -> Result<T, DiscoveryRfc6764ClientStdError>
+    where
+        C: DiscoveryCoroutine<Yield = DiscoveryYield, Return = Result<T, E>>,
+        E: Into<DiscoveryRfc6764ClientStdError>,
+    {
         let mut buf = [0u8; READ_BUFFER_SIZE];
         let mut arg: Option<&[u8]> = None;
 
         loop {
             match coroutine.resume(arg.take()) {
-                DiscoveryCoroutineState::Complete(Ok(report)) => return Ok(report),
+                DiscoveryCoroutineState::Complete(Ok(out)) => return Ok(out),
                 DiscoveryCoroutineState::Complete(Err(err)) => return Err(err.into()),
                 DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead { url }) => {
                     let stream = self.pool.get(&url)?;

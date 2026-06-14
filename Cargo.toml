@@ -75,13 +75,7 @@ subtle = { version = "2", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
 url = { version = "2.2", default-features = false, optional = true }
 
-# [patch.crates-io] # local path
-# io-http.path = "../io-http"
-# pimalaya-cli.path = "../cli"
-# pimalaya-stream.path = "../stream"
-
-[patch.crates-io] # remote git
+[patch.crates-io]
 domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
-# io-http.git = "https://github.com/pimalaya/io-http"
-# pimalaya-cli.git = "https://github.com/pimalaya/cli"
-# pimalaya-stream.git = "https://github.com/pimalaya/stream"
+io-http.git = "https://github.com/pimalaya/io-http"
+pimalaya-cli.git = "https://github.com/pimalaya/cli"
