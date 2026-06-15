@@ -20,7 +20,7 @@ use pimconf::pacc::cli::PaccCommand;
 #[cfg(feature = "rfc6186")]
 use pimconf::rfc6186::cli::SrvCommand;
 #[cfg(feature = "rfc6764")]
-use pimconf::rfc6764::cli::Rfc6764Command;
+use pimconf::rfc6764::cli::WebdavCommand;
 
 fn main() {
     let cli = Cli::parse();
@@ -58,7 +58,7 @@ enum Command {
     #[cfg(feature = "rfc6186")]
     Srv(SrvCommand),
     #[cfg(feature = "rfc6764")]
-    Rfc6764(Rfc6764Command),
+    Webdav(WebdavCommand),
     Completions(CompletionCommand),
     Manuals(ManualCommand),
 }
@@ -74,7 +74,7 @@ impl Command {
             #[cfg(feature = "rfc6186")]
             Self::Srv(cmd) => cmd.execute(printer),
             #[cfg(feature = "rfc6764")]
-            Self::Rfc6764(cmd) => cmd.execute(printer),
+            Self::Webdav(cmd) => cmd.execute(printer),
             Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
             Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
         }

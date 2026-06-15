@@ -9,17 +9,18 @@ use pimalaya_cli::{
 use url::Url;
 
 use crate::{
-    rfc6764::{client::DiscoveryRfc6764ClientStd, types::Rfc6764Report},
+    rfc6764::{client::DiscoveryWebdavClientStd, types::WebdavSrvReport},
     shared::dns::DNS_SERVER,
 };
 
-/// RFC 6764 SRV-based CalDAV/CardDAV service discovery.
+/// RFC 6764 §3 DNS SRV lookup for CalDAV/CardDAV services.
 ///
 /// Looks up `_caldav._tcp.<domain>`, `_caldavs._tcp.<domain>`,
 /// `_carddav._tcp.<domain>` and `_carddavs._tcp.<domain>` over
-/// DNS-over-TCP and reports the best record per service.
+/// DNS-over-TCP and reports the best record per service. The TXT,
+/// `.well-known` and resolve mechanisms are library-only.
 #[derive(Debug, Args)]
-pub struct Rfc6764Command {
+pub struct WebdavCommand {
     /// Domain to look up SRV records for.
     pub domain: String,
     /// DNS resolver (`host:port`).
@@ -27,20 +28,20 @@ pub struct Rfc6764Command {
     pub dns_server: String,
 }
 
-impl Rfc6764Command {
+impl WebdavCommand {
     pub fn execute(self, printer: &mut impl Printer) -> Result<()> {
         let resolver = Url::parse(&format!("tcp://{}", self.dns_server))?;
-        let mut client = DiscoveryRfc6764ClientStd::new(resolver);
+        let mut client = DiscoveryWebdavClientStd::new(resolver);
         let report = client.discover(&self.domain)?;
-        printer.out(Rfc6764ReportOutput(report))
+        printer.out(WebdavSrvReportOutput(report))
     }
 }
 
 #[derive(serde::Serialize)]
 #[serde(transparent)]
-struct Rfc6764ReportOutput(Rfc6764Report);
+struct WebdavSrvReportOutput(WebdavSrvReport);
 
-impl fmt::Display for Rfc6764ReportOutput {
+impl fmt::Display for WebdavSrvReportOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
         table

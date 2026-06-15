@@ -1016,7 +1016,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-cli"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/cli#a53a1a9c2761b4b439ffeaf4004d6c51cb4101d0"
+source = "git+https://github.com/pimalaya/cli#0331ddd1d8878c27dce1680c12ac5585b92868ea"
 dependencies = [
  "anyhow",
  "clap",

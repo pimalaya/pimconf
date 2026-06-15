@@ -1,18 +1,28 @@
-//! # Standard, blocking RFC 6764 SRV discovery client
+//! # Standard, blocking RFC 6764 CalDAV/CardDAV discovery client
 //!
-//! [`DiscoveryRfc6764ClientStd`] drives the [`DiscoveryRfc6764`]
-//! combined coroutine (four SRV queries: best-record-per-service
-//! assembly) end-to-end through a local [`StreamPool`]. One method:
-//! [`discover`].
+//! [`DiscoveryWebdavClientStd`] pumps the RFC 6764 discovery coroutines
+//! end-to-end through a local [`StreamPool`], exposing one entry point
+//! per mechanism: [`discover`] (SRV records, §3), [`txt`] (the TXT
+//! `path` lookup, §4) and [`well_known`] (a single `.well-known` probe,
+//! §5), plus [`resolve`] (SRV then TXT then `.well-known`, into a
+//! context root).
 //!
-//! Only the default `tcp` factory is needed: SRV discovery never
-//! opens an HTTPS connection. Custom DNS transports plug in via
-//! [`with_factory`].
+//! [`discover`] and [`txt`] need only the default `tcp` factory, since
+//! the DNS lookups run over DNS-over-TCP. The `.well-known` steps in
+//! [`well_known`] and [`resolve`] open HTTPS, so those callers must
+//! register the HTTP factories via [`with_tls`]. Custom DNS transports
+//! plug in via [`with_factory`].
 //!
-//! [`with_factory`]: DiscoveryRfc6764ClientStd::with_factory
-//! [`discover`]: DiscoveryRfc6764ClientStd::discover
+//! [`with_factory`]: DiscoveryWebdavClientStd::with_factory
+//! [`with_tls`]: DiscoveryWebdavClientStd::with_tls
+//! [`discover`]: DiscoveryWebdavClientStd::discover
+//! [`txt`]: DiscoveryWebdavClientStd::txt
+//! [`resolve`]: DiscoveryWebdavClientStd::resolve
+//! [`well_known`]: DiscoveryWebdavClientStd::well_known
 
 use std::io;
+
+use alloc::string::String;
 
 use thiserror::Error;
 use url::Url;
@@ -20,25 +30,33 @@ use url::Url;
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6764::{
-        discover::{DiscoveryRfc6764, DiscoveryRfc6764Error},
+        discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
         resolve::{ResolveDav, ResolveDavError},
-        types::{DavService, Rfc6764Report},
+        txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
+        types::{DavService, WebdavSrvReport},
+        well_known::{WellKnown, WellKnownError},
     },
     shared::pool::{Stream, StreamPool},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
 
-/// Errors returned by [`DiscoveryRfc6764ClientStd::discover`].
+/// Errors returned by [`DiscoveryWebdavClientStd::discover`].
 #[derive(Debug, Error)]
-pub enum DiscoveryRfc6764ClientStdError {
+pub enum DiscoveryWebdavClientStdError {
     /// The combined SRV coroutine errored out on one of its four
     /// lookups.
     #[error(transparent)]
-    Discovery(#[from] DiscoveryRfc6764Error),
+    Discovery(#[from] DiscoveryWebdavSrvError),
     /// The combined `domain -> context root` resolve coroutine failed.
     #[error(transparent)]
     Resolve(#[from] ResolveDavError),
+    /// The standalone TXT `path` lookup failed.
+    #[error(transparent)]
+    Txt(#[from] DiscoveryWebdavTxtError),
+    /// The standalone `.well-known` probe failed.
+    #[error(transparent)]
+    WellKnown(#[from] WellKnownError),
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -47,18 +65,19 @@ pub enum DiscoveryRfc6764ClientStdError {
     Pool(#[from] anyhow::Error),
 }
 
-/// Std-blocking RFC 6764 SRV discovery client.
-pub struct DiscoveryRfc6764ClientStd {
+/// Std-blocking RFC 6764 CalDAV/CardDAV discovery client.
+pub struct DiscoveryWebdavClientStd {
     dns: Url,
     pool: StreamPool,
 }
 
-impl DiscoveryRfc6764ClientStd {
+impl DiscoveryWebdavClientStd {
     /// Builds a client that resolves SRV records through `dns` (a
     /// `tcp://host:port` URL pointing at a DNS-over-TCP resolver).
     /// The underlying pool is pre-populated with the default `tcp`
-    /// factory; SRV discovery never opens HTTPS, so HTTPS factories
-    /// are unnecessary.
+    /// factory, which is all [`discover`](Self::discover) needs; add
+    /// the HTTP factories via [`with_tls`](Self::with_tls) before
+    /// running the `.well-known` steps.
     pub fn new(dns: Url) -> Self {
         Self {
             dns,
@@ -91,8 +110,22 @@ impl DiscoveryRfc6764ClientStd {
     pub fn discover(
         &mut self,
         domain: &str,
-    ) -> Result<Rfc6764Report, DiscoveryRfc6764ClientStdError> {
-        let coroutine = DiscoveryRfc6764::new(domain, self.dns.clone());
+    ) -> Result<WebdavSrvReport, DiscoveryWebdavClientStdError> {
+        let coroutine = DiscoveryWebdavSrv::new(domain, self.dns.clone());
+        self.run(coroutine)
+    }
+
+    /// Queries the RFC 6764 §4 TXT `path` record for `service` on
+    /// `domain` (the secure `_caldavs`/`_carddavs` name) and returns
+    /// the advertised context path, or `None` when no `path` record is
+    /// published. Runs over DNS-over-TCP, so it needs no HTTP factory.
+    pub fn txt(
+        &mut self,
+        domain: &str,
+        service: DavService,
+    ) -> Result<Option<String>, DiscoveryWebdavClientStdError> {
+        let qname = service.srv_qname(true, domain);
+        let coroutine = DiscoveryWebdavTxt::new(qname, self.dns.clone());
         self.run(coroutine)
     }
 
@@ -106,17 +139,32 @@ impl DiscoveryRfc6764ClientStd {
         &mut self,
         domain: &str,
         service: DavService,
-    ) -> Result<Url, DiscoveryRfc6764ClientStdError> {
+    ) -> Result<Url, DiscoveryWebdavClientStdError> {
         let coroutine = ResolveDav::new(domain, service, self.dns.clone());
+        self.run(coroutine)
+    }
+
+    /// Probes `.well-known/{service}` on `origin` (a scheme + host +
+    /// port root) as a standalone mechanism: returns `Some(location)`
+    /// when the origin redirects to a context root, `None` when it does
+    /// not. Lets callers order it freely against SRV/PACC. Requires
+    /// [`with_tls`](Self::with_tls).
+    #[cfg(feature = "stream")]
+    pub fn well_known(
+        &mut self,
+        origin: Url,
+        service: DavService,
+    ) -> Result<Option<Url>, DiscoveryWebdavClientStdError> {
+        let coroutine = WellKnown::new(origin, service);
         self.run(coroutine)
     }
 
     /// Pumps any pimconf coroutine (`Yield = DiscoveryYield`) through
     /// the stream pool until completion.
-    fn run<C, T, E>(&mut self, mut coroutine: C) -> Result<T, DiscoveryRfc6764ClientStdError>
+    fn run<C, T, E>(&mut self, mut coroutine: C) -> Result<T, DiscoveryWebdavClientStdError>
     where
         C: DiscoveryCoroutine<Yield = DiscoveryYield, Return = Result<T, E>>,
-        E: Into<DiscoveryRfc6764ClientStdError>,
+        E: Into<DiscoveryWebdavClientStdError>,
     {
         let mut buf = [0u8; READ_BUFFER_SIZE];
         let mut arg: Option<&[u8]> = None;

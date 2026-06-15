@@ -1,15 +1,15 @@
 //! # Combined RFC 6764 SRV discovery coroutine
 //!
-//! [`DiscoveryRfc6764`] runs the four RFC 6764 §3 SRV queries
+//! [`DiscoveryWebdavSrv`] runs the four RFC 6764 §3 SRV queries
 //! (`_caldav._tcp.<domain>`, `_caldavs._tcp.<domain>`,
 //! `_carddav._tcp.<domain>`, `_carddavs._tcp.<domain>`) in series,
 //! picks the best record per service (lowest priority, highest weight
 //! on ties; already sorted by [`DiscoveryDnsSrv`]), and yields a
-//! single [`Rfc6764Report`] when all four steps have completed.
+//! single [`WebdavSrvReport`] when all four steps have completed.
 //!
 //! A per-service DNS failure (`InvalidQname`, `QueryTooLarge`,
 //! `InvalidResponse`) terminates the whole coroutine with
-//! [`DiscoveryRfc6764Error`]; empty SRV answers do not, the matching
+//! [`DiscoveryWebdavSrvError`]; empty SRV answers do not, the matching
 //! slot is simply left as `None` in the report.
 
 use core::mem;
@@ -34,13 +34,13 @@ use crate::{
     rfc6186::types::SrvService,
     rfc6764::{
         srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError},
-        types::Rfc6764Report,
+        types::WebdavSrvReport,
     },
 };
 
-/// Errors emitted by [`DiscoveryRfc6764`].
+/// Errors emitted by [`DiscoveryWebdavSrv`].
 #[derive(Debug, Error)]
-pub enum DiscoveryRfc6764Error {
+pub enum DiscoveryWebdavSrvError {
     #[error("DNS SRV lookup for `_caldav._tcp` failed: {0}")]
     Caldav(#[source] DiscoveryDnsSrvError),
     #[error("DNS SRV lookup for `_caldavs._tcp` failed: {0}")]
@@ -62,15 +62,15 @@ enum State {
 }
 
 /// I/O-free combined coroutine that runs the four RFC 6764 SRV
-/// queries and assembles their best records into a [`Rfc6764Report`].
-pub struct DiscoveryRfc6764 {
+/// queries and assembles their best records into a [`WebdavSrvReport`].
+pub struct DiscoveryWebdavSrv {
     state: State,
     domain: String,
     resolver: Url,
-    report: Rfc6764Report,
+    report: WebdavSrvReport,
 }
 
-impl DiscoveryRfc6764 {
+impl DiscoveryWebdavSrv {
     /// Builds the orchestrator. `resolver` must be a `tcp://host:port`
     /// URL pointing at a DNS-over-TCP resolver; it is yielded back on
     /// every `WantsRead` / `WantsWrite` so the runtime can route the
@@ -83,14 +83,14 @@ impl DiscoveryRfc6764 {
             state: State::Caldav(caldav),
             domain,
             resolver,
-            report: Rfc6764Report::default(),
+            report: WebdavSrvReport::default(),
         }
     }
 }
 
-impl DiscoveryCoroutine for DiscoveryRfc6764 {
+impl DiscoveryCoroutine for DiscoveryWebdavSrv {
     type Yield = DiscoveryYield;
-    type Return = Result<Rfc6764Report, DiscoveryRfc6764Error>;
+    type Return = Result<WebdavSrvReport, DiscoveryWebdavSrvError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
@@ -108,7 +108,7 @@ impl DiscoveryCoroutine for DiscoveryRfc6764 {
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(DiscoveryRfc6764Error::Caldav(err)))
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryWebdavSrvError::Caldav(err)))
                 }
             },
             State::Caldavs(mut srv) => match srv.resume(arg) {
@@ -125,7 +125,7 @@ impl DiscoveryCoroutine for DiscoveryRfc6764 {
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(DiscoveryRfc6764Error::Caldavs(err)))
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryWebdavSrvError::Caldavs(err)))
                 }
             },
             State::Carddav(mut srv) => match srv.resume(arg) {
@@ -142,7 +142,7 @@ impl DiscoveryCoroutine for DiscoveryRfc6764 {
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(DiscoveryRfc6764Error::Carddav(err)))
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryWebdavSrvError::Carddav(err)))
                 }
             },
             State::Carddavs(mut srv) => match srv.resume(arg) {
@@ -155,10 +155,10 @@ impl DiscoveryCoroutine for DiscoveryRfc6764 {
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(DiscoveryRfc6764Error::Carddavs(err)))
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryWebdavSrvError::Carddavs(err)))
                 }
             },
-            State::Done => panic!("DiscoveryRfc6764::resume called after completion"),
+            State::Done => panic!("DiscoveryWebdavSrv::resume called after completion"),
         }
     }
 }

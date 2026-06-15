@@ -1,24 +1,20 @@
 //! # `.well-known/{caldav,carddav}` redirect probe (RFC 6764 §5)
 //!
 //! [`WellKnown`] sends one HTTP GET to `<origin>/.well-known/{service}`
-//! and resolves the DAV context root: a 3xx redirect resolves to its
-//! `Location`, any non-redirect response falls back to `origin`. Pair
-//! it with an HTTP session opened on `origin` so the std client can
-//! route the bytes through the matching stream.
+//! and reports the DAV context root: a 3xx redirect resolves to
+//! `Some(Location)`, any non-redirect response resolves to `None` (the
+//! probe found nothing authoritative on that origin). It reuses the
+//! generic RFC 8615 probe from [`io_http`] and only adds the
+//! [`DiscoveryYield`] plumbing so the std client can route bytes
+//! through the matching stream.
 //!
 //! Discovery runs unauthenticated by design (RFC 6764 bootstrap); the
 //! per-user principal walk that needs credentials lives in the WebDAV
 //! client, not here.
 
-use alloc::string::ToString;
-
 use io_http::{
-    coroutine::{HttpCoroutine, HttpCoroutineState},
-    rfc9110::{
-        request::HttpRequest,
-        send::{HttpSendOutput, HttpSendYield},
-    },
-    rfc9112::send::{Http11Send, Http11SendError},
+    coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
+    rfc8615::well_known::{Http11WellKnown, Http11WellKnownError},
 };
 use log::trace;
 use thiserror::Error;
@@ -33,65 +29,76 @@ use crate::{
 #[derive(Debug, Error)]
 pub enum WellKnownError {
     #[error(transparent)]
-    Http(#[from] Http11SendError),
+    Http(#[from] Http11WellKnownError),
 }
 
 /// I/O-free `.well-known` redirect probe. Yields its origin URL on
 /// every step so the std client routes bytes through the matching
-/// HTTPS stream.
+/// HTTPS stream. Completes with the redirect target, or `None` when the
+/// origin did not redirect.
 pub struct WellKnown {
     origin: Url,
-    send: Http11Send,
+    state: State,
 }
 
 impl WellKnown {
     /// Builds a probe for `service` against `origin`, a scheme + host
     /// + port root such as `https://carddav.example.com/`.
     pub fn new(origin: Url, service: DavService) -> Self {
-        let mut url = origin.clone();
-        url.set_path(service.well_known_path());
+        let state = match Http11WellKnown::prepare_request(origin.as_str(), service.service_name())
+        {
+            Ok(request) => State::Probe(Http11WellKnown::new(request)),
+            Err(err) => State::Failed(Some(err.into())),
+        };
 
-        let host = url.host_str().unwrap_or_default().to_string();
-        let req = HttpRequest::get(url).header("Host", host);
-
-        Self {
-            origin,
-            send: Http11Send::new(req),
-        }
+        Self { origin, state }
     }
 }
 
 impl DiscoveryCoroutine for WellKnown {
     type Yield = DiscoveryYield;
-    type Return = Result<Url, WellKnownError>;
+    type Return = Result<Option<Url>, WellKnownError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
-        match self.send.resume(arg) {
-            HttpCoroutineState::Yielded(HttpSendYield::WantsRead) => {
-                DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead {
-                    url: self.origin.clone(),
-                })
+        match &mut self.state {
+            State::Failed(err) => {
+                let err = err.take().expect("WellKnown resumed after completion");
+                DiscoveryCoroutineState::Complete(Err(err))
             }
-            HttpCoroutineState::Yielded(HttpSendYield::WantsWrite(bytes)) => {
-                DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsWrite {
-                    url: self.origin.clone(),
-                    bytes,
-                })
-            }
-            HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { url, .. }) => {
-                trace!("well-known redirected to {url}");
-                DiscoveryCoroutineState::Complete(Ok(url))
-            }
-            HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. })) => {
-                trace!(
-                    "well-known returned {} without redirect; falling back to origin",
-                    *response.status
-                );
-                DiscoveryCoroutineState::Complete(Ok(self.origin.clone()))
-            }
-            HttpCoroutineState::Complete(Err(err)) => {
-                DiscoveryCoroutineState::Complete(Err(err.into()))
-            }
+            State::Probe(probe) => match probe.resume(arg) {
+                HttpCoroutineState::Yielded(HttpYield::WantsRead) => {
+                    DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead {
+                        url: self.origin.clone(),
+                    })
+                }
+                HttpCoroutineState::Yielded(HttpYield::WantsWrite(bytes)) => {
+                    DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsWrite {
+                        url: self.origin.clone(),
+                        bytes,
+                    })
+                }
+                HttpCoroutineState::Complete(Ok(output)) => match output.redirect_url {
+                    Some(url) => {
+                        trace!("well-known redirected to {url}");
+                        DiscoveryCoroutineState::Complete(Ok(Some(url)))
+                    }
+                    None => {
+                        trace!(
+                            "well-known returned {} without redirect",
+                            *output.response.status
+                        );
+                        DiscoveryCoroutineState::Complete(Ok(None))
+                    }
+                },
+                HttpCoroutineState::Complete(Err(err)) => {
+                    DiscoveryCoroutineState::Complete(Err(err.into()))
+                }
+            },
         }
     }
+}
+
+enum State {
+    Probe(Http11WellKnown),
+    Failed(Option<WellKnownError>),
 }

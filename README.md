@@ -34,8 +34,10 @@ This repository ships three things:
   - DNS TXT `mailconf=<URL>` redirect
 - **RFC 6186 SRV** mail service discovery <sup>[rfc6186](https://datatracker.ietf.org/doc/html/rfc6186)</sup> (requires `rfc6186` feature):
   - `_imap._tcp`, `_imaps._tcp`, `_submission._tcp` assembly into a single report
-- **RFC 6764 SRV** CalDAV/CardDAV discovery <sup>[rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)</sup> (requires `rfc6764` feature):
-  - `_caldav._tcp`, `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp` assembly into a single report
+- **RFC 6764** CalDAV/CardDAV discovery <sup>[rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)</sup> (requires `rfc6764` feature), covering all three mechanisms:
+  - DNS SRV: `_caldav._tcp`, `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp` assembly into a single report
+  - DNS TXT: `path` context lookup on the SRV name
+  - `/.well-known/{caldav,carddav}` redirect probe, plus a combined `domain -> context root` resolve chaining SRV, then TXT, then `.well-known`
 - **PACC** discovery support <sup>[draft-ietf-mailmaint-pacc-02](https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02)</sup> (requires `pacc` feature):
   - Well-known JSON configuration fetch
   - SHA-256 digest verification against the `_ua-auto-config` TXT record
@@ -179,10 +181,10 @@ Run RFC 6186 SRV discovery (top-level subcommand):
 pimconf srv fastmail.com
 ```
 
-Run RFC 6764 CalDAV/CardDAV SRV discovery:
+Run RFC 6764 DNS SRV discovery for CalDAV/CardDAV:
 
 ```sh
-pimconf rfc6764 fastmail.com
+pimconf webdav fastmail.com
 ```
 
 Run PACC discovery:
