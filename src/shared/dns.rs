@@ -18,6 +18,9 @@ use alloc::{
     vec::Vec,
 };
 
+#[cfg(feature = "client")]
+use std::net::IpAddr;
+
 use domain::{
     new::{
         base::{
@@ -224,4 +227,52 @@ impl DiscoveryCoroutine for DiscoveryDnsTxt {
             }
         }
     }
+}
+
+/// Best-effort system DNS resolver as a `tcp://<ip>:53` URL, read from
+/// `/etc/resolv.conf` on unix and from the network adapters on windows.
+/// Returns `None` when no nameserver can be determined; callers fall
+/// back to a default resolver.
+#[cfg(feature = "client")]
+pub fn system_resolver() -> Option<Url> {
+    use alloc::format;
+
+    let host = match system_nameserver()? {
+        IpAddr::V4(ip) => ip.to_string(),
+        IpAddr::V6(ip) => format!("[{ip}]"),
+    };
+
+    format!("tcp://{host}:53").parse().ok()
+}
+
+/// First nameserver listed in `/etc/resolv.conf`.
+#[cfg(all(feature = "client", unix))]
+fn system_nameserver() -> Option<IpAddr> {
+    use std::fs;
+
+    use resolv_conf::{Config, ScopedIp};
+
+    let raw = fs::read_to_string("/etc/resolv.conf").ok()?;
+    let config = Config::parse(&raw).ok()?;
+
+    config
+        .nameservers
+        .into_iter()
+        .next()
+        .map(|scoped| match scoped {
+            ScopedIp::V4(ip) => IpAddr::V4(ip),
+            ScopedIp::V6(ip, _) => IpAddr::V6(ip),
+        })
+}
+
+/// First DNS server reported by the system network adapters.
+#[cfg(all(feature = "client", windows))]
+fn system_nameserver() -> Option<IpAddr> {
+    let adapters = ipconfig::get_adapters().ok()?;
+
+    adapters
+        .iter()
+        .flat_map(|adapter| adapter.dns_servers())
+        .copied()
+        .next()
 }

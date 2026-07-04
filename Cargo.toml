@@ -17,8 +17,8 @@ features = ["cli"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "autoconfig", "pacc", "rfc6186", "rfc6764"]
-client = ["dep:anyhow", "dep:io-http", "io-http/client", "dep:url"]
+default = ["rustls-ring", "autoconfig", "pacc", "rfc6186", "rfc6764", "cli"]
+client = ["dep:anyhow", "dep:io-http", "io-http/client", "dep:url", "dep:resolv-conf", "dep:ipconfig"]
 stream = ["client", "dep:pimalaya-stream"]
 cli = ["dep:clap", "pimalaya-cli/terminal", "pimalaya-cli/table", "stream"]
 autoconfig = ["dep:io-http", "dep:serde", "dep:serde-xml-rs", "dep:url"]
@@ -74,6 +74,12 @@ sha2 = { version = "0.10", default-features = false, optional = true }
 subtle = { version = "2", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
 url = { version = "2.2", default-features = false, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+resolv-conf = { version = "0.7", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+ipconfig = { version = "0.3", optional = true }
 
 [patch.crates-io]
 domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
