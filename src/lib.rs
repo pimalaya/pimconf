@@ -14,7 +14,8 @@ pub mod autoconfig;
     feature = "autoconfig",
     feature = "pacc",
     feature = "rfc6186",
-    feature = "rfc6764"
+    feature = "rfc6764",
+    feature = "rfc8620"
 ))]
 pub mod coroutine;
 #[cfg(feature = "pacc")]
@@ -23,10 +24,15 @@ pub mod pacc;
 pub mod rfc6186;
 #[cfg(feature = "rfc6764")]
 pub mod rfc6764;
+#[cfg(feature = "rfc8620")]
+pub mod rfc8620;
+#[cfg(feature = "search")]
+pub mod search;
 #[cfg(any(
     feature = "autoconfig",
     feature = "pacc",
     feature = "rfc6186",
-    feature = "rfc6764"
+    feature = "rfc6764",
+    feature = "rfc8620"
 ))]
 pub mod shared;

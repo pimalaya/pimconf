@@ -27,14 +27,16 @@ use alloc::string::String;
 use thiserror::Error;
 use url::Url;
 
+#[cfg(feature = "stream")]
+use crate::rfc6764::{resolve::ResolveDav, well_known::WellKnown};
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6764::{
         discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
-        resolve::{ResolveDav, ResolveDavError},
+        resolve::ResolveDavError,
         txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
         types::{DavService, WebdavSrvReport},
-        well_known::{WellKnown, WellKnownError},
+        well_known::WellKnownError,
     },
     shared::pool::{Stream, StreamPool},
 };

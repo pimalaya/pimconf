@@ -21,6 +21,8 @@ use pimconf::pacc::cli::PaccCommand;
 use pimconf::rfc6186::cli::SrvCommand;
 #[cfg(feature = "rfc6764")]
 use pimconf::rfc6764::cli::WebdavCommand;
+#[cfg(feature = "search")]
+use pimconf::search::cli::SearchCommand;
 
 fn main() {
     let cli = Cli::parse();
@@ -55,6 +57,8 @@ enum Command {
     Autoconfig(AutoconfigCommand),
     #[cfg(feature = "pacc")]
     Pacc(PaccCommand),
+    #[cfg(feature = "search")]
+    Search(SearchCommand),
     #[cfg(feature = "rfc6186")]
     Srv(SrvCommand),
     #[cfg(feature = "rfc6764")]
@@ -71,6 +75,8 @@ impl Command {
             Self::Autoconfig(cmd) => cmd.execute(printer, tls),
             #[cfg(feature = "pacc")]
             Self::Pacc(cmd) => cmd.execute(printer, tls),
+            #[cfg(feature = "search")]
+            Self::Search(cmd) => cmd.execute(printer, tls),
             #[cfg(feature = "rfc6186")]
             Self::Srv(cmd) => cmd.execute(printer),
             #[cfg(feature = "rfc6764")]

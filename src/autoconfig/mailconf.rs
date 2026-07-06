@@ -72,8 +72,14 @@ impl DiscoveryCoroutine for DiscoveryMailconf {
                 for record in records {
                     let mut joined = Vec::new();
 
-                    for cs in record.rdata.iter() {
-                        joined.extend_from_slice(&cs.octets);
+                    // TODO: restore when the domain new API is
+                    // released:
+                    //
+                    // for cs in record.rdata.iter() {
+                    //     joined.extend_from_slice(&cs.octets);
+                    // }
+                    for cs in record.data().iter() {
+                        joined.extend_from_slice(cs);
                     }
 
                     let Some(value) = joined.strip_prefix(b"mailconf=") else {

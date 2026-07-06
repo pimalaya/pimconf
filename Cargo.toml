@@ -17,15 +17,17 @@ features = ["cli"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "autoconfig", "pacc", "rfc6186", "rfc6764", "cli"]
+default = ["rustls-ring", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "search", "cli"]
 client = ["dep:anyhow", "dep:io-http", "io-http/client", "dep:url", "dep:resolv-conf", "dep:ipconfig"]
 stream = ["client", "dep:pimalaya-stream"]
 cli = ["dep:clap", "pimalaya-cli/terminal", "pimalaya-cli/table", "stream"]
 autoconfig = ["dep:io-http", "dep:serde", "dep:serde-xml-rs", "dep:url"]
 pacc = ["dep:io-http", "dep:serde", "dep:serde_json", "dep:url", "dep:base64", "dep:sha2", "dep:subtle"]
 srv = ["rfc6186"]
-rfc6186 = ["dep:serde", "dep:url"]
+rfc6186 = ["dep:serde", "dep:url", "dep:io-http"]
 rfc6764 = ["dep:serde", "dep:url", "rfc6186"]
+rfc8620 = ["dep:url", "rfc6186"]
+search = ["autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620"]
 rustls-ring = ["stream", "pimalaya-stream/rustls-ring", "io-http/rustls-ring"]
 rustls-aws = ["stream", "pimalaya-stream/rustls-aws", "io-http/rustls-aws"]
 native-tls = ["stream", "pimalaya-stream/native-tls", "io-http/native-tls"]
@@ -62,7 +64,9 @@ env_logger = "0.11"
 anyhow = { version = "1", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 clap = { version = "4.4", features = ["derive", "wrap_help"], optional = true }
-domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
+# TODO: restore when the domain new API is released:
+# domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
+domain = { version = "0.12", default-features = false, features = ["alloc", "std"] }
 io-http = { version = "0.1", default-features = false, optional = true }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.0.1", default-features = false, optional = true }
@@ -82,6 +86,7 @@ resolv-conf = { version = "0.7", optional = true }
 ipconfig = { version = "0.3", optional = true }
 
 [patch.crates-io]
-domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
-io-http.git = "https://github.com/pimalaya/io-http"
+# TODO: restore when the domain new API is released:
+# domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
+io-http.path = "../io-http"
 pimalaya-cli.git = "https://github.com/pimalaya/cli"

@@ -6,11 +6,10 @@ use pimalaya_cli::{
     printer::Printer,
     table::{Cell, ContentArrangement, Table, presets::UTF8_FULL},
 };
-use url::Url;
 
 use crate::{
     rfc6764::{client::DiscoveryWebdavClientStd, types::WebdavSrvReport},
-    shared::dns::DNS_SERVER,
+    shared::dns::{DNS_SERVER, resolver_url},
 };
 
 /// RFC 6764 §3 DNS SRV lookup for CalDAV/CardDAV services.
@@ -23,14 +22,15 @@ use crate::{
 pub struct WebdavCommand {
     /// Domain to look up SRV records for.
     pub domain: String,
-    /// DNS resolver (`host:port`).
+    /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+    /// as `https://cloudflare-dns.com/dns-query`.
     #[arg(long, default_value = DNS_SERVER)]
     pub dns_server: String,
 }
 
 impl WebdavCommand {
     pub fn execute(self, printer: &mut impl Printer) -> Result<()> {
-        let resolver = Url::parse(&format!("tcp://{}", self.dns_server))?;
+        let resolver = resolver_url(&self.dns_server)?;
         let mut client = DiscoveryWebdavClientStd::new(resolver);
         let report = client.discover(&self.domain)?;
         printer.out(WebdavSrvReportOutput(report))

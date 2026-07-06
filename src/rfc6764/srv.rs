@@ -14,4 +14,4 @@
 //!
 //! [`discover`]: crate::rfc6764::discover
 
-pub use crate::rfc6186::srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError};
+pub use crate::rfc6186::srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError, SrvRecord};

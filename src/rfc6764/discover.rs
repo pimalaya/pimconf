@@ -19,13 +19,14 @@ use alloc::{
     string::{String, ToString},
 };
 
-use domain::new::{
-    base::{
-        Record,
-        name::{NameBuf, RevNameBuf},
-    },
-    rdata::Srv,
-};
+// TODO: restore when the domain new API is released:
+// use domain::new::{
+//     base::{
+//         Record,
+//         name::{NameBuf, RevNameBuf},
+//     },
+//     rdata::Srv,
+// };
 use thiserror::Error;
 use url::Url;
 
@@ -33,7 +34,7 @@ use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6186::types::SrvService,
     rfc6764::{
-        srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError},
+        srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError, SrvRecord},
         types::WebdavSrvReport,
     },
 };
@@ -163,16 +164,28 @@ impl DiscoveryCoroutine for DiscoveryWebdavSrv {
     }
 }
 
-fn into_service(record: Record<RevNameBuf, Srv<NameBuf>>) -> SrvService {
+// TODO: restore when the domain new API is released:
+//
+// fn into_service(record: Record<RevNameBuf, Srv<NameBuf>>) -> SrvService {
+//     SrvService {
+//         host: record
+//             .rdata
+//             .target
+//             .to_string()
+//             .trim_end_matches('.')
+//             .to_string(),
+//         port: record.rdata.port.get(),
+//         priority: record.rdata.priority.get(),
+//         weight: record.rdata.weight.get(),
+//     }
+// }
+fn into_service(record: SrvRecord) -> SrvService {
+    let srv = record.into_data();
+
     SrvService {
-        host: record
-            .rdata
-            .target
-            .to_string()
-            .trim_end_matches('.')
-            .to_string(),
-        port: record.rdata.port.get(),
-        priority: record.rdata.priority.get(),
-        weight: record.rdata.weight.get(),
+        host: srv.target().to_string().trim_end_matches('.').to_string(),
+        port: srv.port(),
+        priority: srv.priority(),
+        weight: srv.weight(),
     }
 }

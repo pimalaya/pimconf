@@ -29,13 +29,14 @@ use std::io;
 
 use alloc::vec::Vec;
 
-use domain::new::{
-    base::{
-        Record,
-        name::{NameBuf, RevNameBuf},
-    },
-    rdata::Mx,
-};
+// TODO: restore when the domain new API is released:
+// use domain::new::{
+//     base::{
+//         Record,
+//         name::{NameBuf, RevNameBuf},
+//     },
+//     rdata::Mx,
+// };
 use thiserror::Error;
 use url::Url;
 
@@ -43,7 +44,7 @@ use crate::{
     autoconfig::{
         isp::{DiscoveryIsp, DiscoveryIspError},
         mailconf::{DiscoveryMailconf, DiscoveryMailconfError},
-        mx::{DiscoveryDnsMx, DiscoveryDnsMxError},
+        mx::{DiscoveryDnsMx, DiscoveryDnsMxError, MxRecord},
         types::Autoconfig,
     },
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
@@ -157,10 +158,7 @@ impl DiscoveryAutoconfigClientStd {
     /// Returns the MX records for `domain`, sorted by ascending
     /// preference (best first). Empty when the response carries no
     /// MX answers.
-    pub fn mx(
-        &mut self,
-        domain: &str,
-    ) -> Result<Vec<Record<RevNameBuf, Mx<NameBuf>>>, DiscoveryAutoconfigClientStdError> {
+    pub fn mx(&mut self, domain: &str) -> Result<Vec<MxRecord>, DiscoveryAutoconfigClientStdError> {
         self.run(DiscoveryDnsMx::new(domain, self.dns.clone()))
     }
 

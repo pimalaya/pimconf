@@ -29,6 +29,7 @@ use alloc::{
     string::{String, ToString},
 };
 
+use log::{debug, trace};
 use thiserror::Error;
 use url::Url;
 
@@ -141,8 +142,23 @@ impl DiscoveryCoroutine for ResolveDav {
                     self.state = State::Srv(srv);
                     DiscoveryCoroutineState::Yielded(y)
                 }
+                // NOTE: an unreachable resolver (mobile networks
+                // routinely block outbound DNS) must not kill the
+                // resolve: proceed as if no SRV record was published
+                // and probe `.well-known` on the domain itself, whose
+                // HTTPS socket resolves through the OS.
                 DiscoveryCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(err.into()))
+                    debug!("skip failed SRV lookups, probe .well-known");
+                    trace!("{err:?}");
+
+                    let origin = match self.origin(None, None) {
+                        Ok(origin) => origin,
+                        Err(err) => return DiscoveryCoroutineState::Complete(Err(err)),
+                    };
+
+                    let probe = WellKnown::new(origin.clone(), self.service);
+                    self.state = State::WellKnown { probe, origin };
+                    self.resume(None)
                 }
             },
             State::Txt { mut txt, origin } => match txt.resume(arg) {

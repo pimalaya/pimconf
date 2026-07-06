@@ -4,7 +4,7 @@
 //! by [draft-ietf-mailmaint-pacc-02]. Containers default to camelCase
 //! via `#[serde(rename_all = "camelCase")]`; the few kebab-case keys
 //! the draft uses on the wire (`oauth-public`, `content-type`) get a
-//! field-level `#[serde(rename(serialize = ...))]` override.
+//! field-level `#[serde(rename = ...)]` override, both directions.
 //!
 //! [draft-ietf-mailmaint-pacc-02]: https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02
 
@@ -57,7 +57,7 @@ pub struct TextProtocol {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Authentication {
-    #[serde(rename(serialize = "oauth-public"))]
+    #[serde(rename = "oauth-public")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth_public: Option<OauthPublic>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,7 +92,7 @@ pub struct Provider {
 #[serde(rename_all = "camelCase")]
 pub struct Logo {
     pub url: String,
-    #[serde(rename(serialize = "content-type"))]
+    #[serde(rename = "content-type")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
 }

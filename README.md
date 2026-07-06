@@ -38,9 +38,17 @@ This repository ships three things:
   - DNS SRV: `_caldav._tcp`, `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp` assembly into a single report
   - DNS TXT: `path` context lookup on the SRV name
   - `/.well-known/{caldav,carddav}` redirect probe, plus a combined `domain -> context root` resolve chaining SRV, then TXT, then `.well-known`
+- **RFC 8620** JMAP service autodiscovery <sup>[rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)</sup> (requires `rfc8620` feature):
+  - DNS SRV: `_jmap._tcp` origin lookup
+  - `/.well-known/jmap` session probe following any redirect chain (a terminal 2xx or 401 locates the session resource; anything else means no JMAP), plus a combined `domain -> session URL` resolve chaining SRV then `.well-known`
+- **Unified search** from a single email address (requires `search` feature):
+  - chains fixed provider rules (Google, Microsoft, matched by domain then by MX records), PACC, autoconfig, RFC 6186 SRV, RFC 6764 CalDAV/CardDAV and RFC 8620 JMAP discovery
+  - reduces everything to one list of service configs (endpoint, username, authentication methods: password, OAuth 2.0 authorization code grant, OAuth 2.0 device authorization grant, OAuth 2.0 issuer)
+  - search-all collects configs from every mechanism, search-first stops at the first mechanism yielding one
 - **PACC** discovery support <sup>[draft-ietf-mailmaint-pacc-02](https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02)</sup> (requires `pacc` feature):
   - Well-known JSON configuration fetch
   - SHA-256 digest verification against the `_ua-auto-config` TXT record
+- **RFC 8484** DNS-over-HTTPS <sup>[rfc8484](https://datatracker.ietf.org/doc/html/rfc8484)</sup>: every DNS lookup (MX, TXT, SRV) accepts an `https://…/dns-query` resolver URL next to the default `tcp://host:port` transport, so discovery works on networks that block outbound DNS
 - **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
@@ -78,7 +86,7 @@ To use pimconf as a library, add it to your Cargo.toml:
 pimconf = { version = "0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "rfc6764", "client"] }
 ```
 
-The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186` / `rfc6764`) for a `no_std`-friendly, pure-coroutine build.
+The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186` / `rfc6764` / `rfc8620`) for a `no_std`-friendly, pure-coroutine build.
 
 ### Nix
 
@@ -173,6 +181,13 @@ pimconf autoconfig user fastmail.com isp-fallback --secure
 pimconf autoconfig user fastmail.com ispdb --secure
 pimconf autoconfig user fastmail.com mx
 pimconf autoconfig user fastmail.com mailconf
+```
+
+Search every mechanism for service configs from a single email address (add `--first` to stop at the first mechanism yielding configs, `--service` to restrict the searched services):
+
+```sh
+pimconf search user@fastmail.com
+pimconf search user@fastmail.com --first --service carddav
 ```
 
 Run RFC 6186 SRV discovery (top-level subcommand):

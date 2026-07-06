@@ -48,10 +48,12 @@ fn main() {
     };
 
     for record in records {
+        // TODO: restore when the domain new API is released:
+        // println!("{} {}", record.rdata.preference.get(), record.rdata.exchange);
         println!(
             "{} {}",
-            record.rdata.preference.get(),
-            record.rdata.exchange
+            record.data().preference(),
+            record.data().exchange()
         );
     }
 }

@@ -16,7 +16,7 @@ use url::Url;
 
 use crate::{
     autoconfig::{client::DiscoveryAutoconfigClientStd, mx::mx_parent_domain, types::Autoconfig},
-    shared::dns::DNS_SERVER,
+    shared::dns::{DNS_SERVER, resolver_url},
 };
 
 /// Thunderbird Autoconfiguration discovery.
@@ -41,7 +41,8 @@ pub struct AutoconfigCommand {
     /// Domain of the email address (default-mode positional).
     /// Required when no subcommand is given; ignored otherwise.
     domain: Option<String>,
-    /// DNS resolver (`host:port`).
+    /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+    /// as `https://cloudflare-dns.com/dns-query`.
     #[arg(long, default_value = DNS_SERVER)]
     server: String,
 
@@ -114,7 +115,9 @@ fn try_isps(
 
 fn mx_parent(client: &mut DiscoveryAutoconfigClientStd, domain: &str) -> Option<String> {
     let records = client.mx(domain).ok()?;
-    let target = records.first().map(|r| r.rdata.exchange.to_string())?;
+    // TODO: restore when the domain new API is released:
+    // let target = records.first().map(|r| r.rdata.exchange.to_string())?;
+    let target = records.first().map(|r| r.data().exchange().to_string())?;
     mx_parent_domain(&target)
 }
 
@@ -129,7 +132,8 @@ enum AutoconfigSubcommand {
         /// Use HTTPS instead of plain HTTP.
         #[arg(short, long)]
         secure: bool,
-        /// DNS resolver (`host:port`).
+        /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+        /// as `https://cloudflare-dns.com/dns-query`.
         #[arg(long, default_value = DNS_SERVER)]
         server: String,
     },
@@ -141,7 +145,8 @@ enum AutoconfigSubcommand {
         /// Use HTTPS instead of plain HTTP.
         #[arg(short, long)]
         secure: bool,
-        /// DNS resolver (`host:port`).
+        /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+        /// as `https://cloudflare-dns.com/dns-query`.
         #[arg(long, default_value = DNS_SERVER)]
         server: String,
     },
@@ -153,7 +158,8 @@ enum AutoconfigSubcommand {
         /// Use HTTPS instead of plain HTTP.
         #[arg(short, long)]
         secure: bool,
-        /// DNS resolver (`host:port`).
+        /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+        /// as `https://cloudflare-dns.com/dns-query`.
         #[arg(long, default_value = DNS_SERVER)]
         server: String,
     },
@@ -161,7 +167,8 @@ enum AutoconfigSubcommand {
     /// Look up MX records for the given domain.
     Mx {
         domain: String,
-        /// DNS resolver (`host:port`).
+        /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+        /// as `https://cloudflare-dns.com/dns-query`.
         #[arg(long, default_value = DNS_SERVER)]
         server: String,
     },
@@ -170,7 +177,8 @@ enum AutoconfigSubcommand {
     /// domain.
     Mailconf {
         domain: String,
-        /// DNS resolver (`host:port`).
+        /// DNS resolver: `host:port`, or an RFC 8484 resolver URL such
+        /// as `https://cloudflare-dns.com/dns-query`.
         #[arg(long, default_value = DNS_SERVER)]
         server: String,
     },
@@ -216,9 +224,14 @@ impl AutoconfigSubcommand {
                 let records = client
                     .mx(&domain)?
                     .into_iter()
+                    // TODO: restore when the domain new API is
+                    // released:
+                    //
+                    // preference: record.rdata.preference.get(),
+                    // exchange: record.rdata.exchange.to_string(),
                     .map(|record| DnsMxRecordOutput {
-                        preference: record.rdata.preference.get(),
-                        exchange: record.rdata.exchange.to_string(),
+                        preference: record.data().preference(),
+                        exchange: record.data().exchange().to_string(),
                     })
                     .collect();
                 printer.out(DnsMxOutput { records })
@@ -237,7 +250,7 @@ impl AutoconfigSubcommand {
 }
 
 fn parse_resolver(server: &str) -> Result<Url> {
-    Ok(Url::parse(&format!("tcp://{server}"))?)
+    Ok(resolver_url(server)?)
 }
 
 #[derive(serde::Serialize)]
