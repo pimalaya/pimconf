@@ -48,7 +48,7 @@ pub struct SearchCommand {
 impl SearchCommand {
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let resolver = resolver_url(&self.server)?;
-        let mut client = SearchClientStd::new(resolver).with_tls(tls.clone());
+        let client = SearchClientStd::new(resolver, tls.clone());
         let services: BTreeSet<Service> = self.services.into_iter().map(Into::into).collect();
 
         let configs = if self.first {

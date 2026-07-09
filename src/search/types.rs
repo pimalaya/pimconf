@@ -45,6 +45,36 @@ pub struct ServiceConfig {
 }
 
 impl ServiceConfig {
+    /// The URLs whose unauthenticated 401 may advertise the config's
+    /// schemes (to feed [`refine_auth`]): the HTTP endpoint itself,
+    /// then the service's well-known path for the DAV services (some
+    /// servers, fastmail among them, 404 the bare origin but guard
+    /// the well-known walk). Empty for TCP endpoints.
+    ///
+    /// [`refine_auth`]: Self::refine_auth
+    pub fn probe_urls(&self) -> Vec<Url> {
+        let Endpoint::Http(raw) = &self.endpoint else {
+            return Vec::new();
+        };
+        let Ok(url) = Url::parse(raw) else {
+            return Vec::new();
+        };
+
+        let mut urls = vec![url.clone()];
+        let well_known = match self.service {
+            Service::Caldav => Some("/.well-known/caldav"),
+            Service::Carddav => Some("/.well-known/carddav"),
+            _ => None,
+        };
+        if let Some(path) = well_known {
+            let mut probe = url;
+            probe.set_path(path);
+            urls.push(probe);
+        }
+
+        urls
+    }
+
     /// Refines the password and bearer methods from the schemes the
     /// service endpoint advertised on its unauthenticated 401 (PACC
     /// §5.4.2): the endpoint's own advertisement beats any

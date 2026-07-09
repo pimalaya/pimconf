@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the serial `SearchAll`/`SearchFirst` coroutines with bricks plus orchestration: the search module now exposes the pure `ConfigCollector` (per-mechanism outputs fed in priority order, filtered against the requested services and merged) and `ServiceConfig::probe_urls` (the endpoints whose unauthenticated 401 may advertise the config's schemes), while the per-mechanism discovery coroutines stay where they were; consumers orchestrate the bricks however they want, typically in parallel on their own transports. `SearchClientStd` became that reference orchestrator: one thread per mechanism (each on its own stream pool) and one probe thread per config, constructed with `new(dns, tls)` (the `with_tls`/`with_factory` builders are gone, and the module moved behind the `stream` feature). `search_first` keeps its output shape but no longer stops early: every mechanism runs in parallel and only the highest-priority one that produced configs is kept.
+
 ### Added
 
 - Added a per-endpoint authentication probe to the search: after the mechanisms run, every collected HTTP config (JMAP, CalDAV, CardDAV) is asked which schemes it actually accepts through its unauthenticated 401 `WWW-Authenticate` (per PACC §5.4.2 and RFC 9110 §11.6.1, probing the endpoint then the service's well-known walk), and its password and bearer methods are refined accordingly, OAuth methods untouched. Account-level configuration documents cannot express per-service schemes: fastmail's PACC claims password support account-wide, while its JMAP session endpoint only advertises `Bearer` and its CardDAV root advertises `Basic` and `Bearer`; the probe now makes each config say exactly that. The probe lives in the new `rfc9110` module (the `WWW-Authenticate` parser moved there from the RFC 8620 probe), and first mode probes its configs before completing.
