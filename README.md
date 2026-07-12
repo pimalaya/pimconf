@@ -41,7 +41,8 @@ This repository ships three things:
 - **RFC 8620** JMAP service autodiscovery <sup>[rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)</sup> (requires `rfc8620` feature):
   - DNS SRV: `_jmap._tcp` origin lookup
   - `/.well-known/jmap` session probe following any redirect chain (a terminal 2xx or 401 locates the session resource; anything else means no JMAP), plus a combined `domain -> session URL` resolve chaining SRV then `.well-known`
-- **Unified compose** from a single email address (part of the `cli` feature; it is a thread-spawning std client rather than an I/O-free coroutine):
+- **OAuth 2.0 metadata** discovery: authorization server metadata <sup>[rfc8414](https://datatracker.ietf.org/doc/html/rfc8414)</sup> (requires `rfc8414` feature) and protected resource metadata <sup>[rfc9728](https://datatracker.ietf.org/doc/html/rfc9728)</sup> (requires `rfc9728` feature), resolving a discovered issuer into concrete authorization/token/registration endpoints
+- **Unified compose** from a single email address (part of the lib, gated on `stream`; it is a thread-spawning std client rather than an I/O-free coroutine, and it composes whichever mechanisms are enabled next to `stream`):
   - chains fixed provider rules (Google, Microsoft, matched by domain then by MX records), PACC, autoconfig, RFC 6186 SRV, RFC 6764 CalDAV/CardDAV and RFC 8620 JMAP discovery
   - reduces everything to one list of service configs (endpoint, username, authentication methods: password, OAuth 2.0 authorization code grant, OAuth 2.0 device authorization grant, OAuth 2.0 issuer)
   - compose-all collects configs from every mechanism, compose-first stops at the first mechanism yielding one
@@ -163,63 +164,51 @@ let config = client.discover("fastmail.com").unwrap();
 println!("{config:#?}");
 ```
 
-### CLI
+The CLI is organised by PIM domain (`email`, `calendar`, `contact`, `file`), plus `all` and `auth`. Every mechanism is exposed independently (no merging); the SOURCE column tells the rows apart.
 
-Run the full Thunderbird Autoconfiguration chain on `<local_part> <domain>`:
+Discover everything for an email address, grouped by domain:
 
 ```sh
-pim-discovery autoconfig user fastmail.com
+pim-discovery all user@fastmail.com
 ```
 
-The chain tries, in order: every ISP main URL (secure then plain), every `/.well-known/` URL (secure then plain), the Thunderbird ISPDB, then re-tries the same against the MX target's parent domain, then logs the `mailconf=<URL>` TXT redirect if one is published.
-
-Run a single primitive instead:
+Discover one domain, either the first mechanism that yields a config, or one specific mechanism:
 
 ```sh
-pim-discovery autoconfig user fastmail.com isp --secure
-pim-discovery autoconfig user fastmail.com isp-fallback --secure
-pim-discovery autoconfig user fastmail.com ispdb --secure
-pim-discovery autoconfig user fastmail.com mx
-pim-discovery autoconfig user fastmail.com mailconf
+pim-discovery email first user@fastmail.com
+pim-discovery email autoconfig user@fastmail.com
+pim-discovery email srv user@fastmail.com
+pim-discovery email pacc user@fastmail.com
+pim-discovery email jmap user@fastmail.com
+
+pim-discovery calendar first fastmail.com
+pim-discovery calendar dav fastmail.com
+pim-discovery contact dav fastmail.com
+pim-discovery file pacc fastmail.com
 ```
 
-Compose service configs from a single email address by chaining every mechanism (add `--first` to stop at the first mechanism yielding configs, `--service` to restrict the composed services):
+Check whether an address is hosted by a known provider (the same rule `first` and `all` try before the generic mechanisms):
 
 ```sh
-pim-discovery compose user@fastmail.com
-pim-discovery compose user@fastmail.com --first --service carddav
+pim-discovery email is-google user@gmail.com
+pim-discovery email is-microsoft user@outlook.com
 ```
 
-Run RFC 6186 SRV discovery (top-level subcommand):
+Discover how and where to authenticate: probe an HTTP endpoint's `WWW-Authenticate` schemes, fetch an OAuth 2.0 authorization server's metadata (RFC 8414), or a protected resource's metadata (RFC 9728):
 
 ```sh
-pim-discovery srv fastmail.com
+pim-discovery auth http https://carddav.fastmail.com
+pim-discovery auth server https://api.fastmail.com
+pim-discovery auth resource https://api.fastmail.com/jmap/session
 ```
 
-Run RFC 6764 DNS SRV discovery for CalDAV/CardDAV:
+JSON output, and picking a specific TLS stack and crypto provider:
 
 ```sh
-pim-discovery webdav fastmail.com
-```
-
-Run PACC discovery:
-
-```sh
-pim-discovery pacc fastmail.com
-```
-
-JSON output:
-
-```sh
-pim-discovery --json autoconfig user fastmail.com
-```
-
-Pick a specific TLS stack and crypto provider:
-
-```sh
-pim-discovery --tls rustls --rustls-crypto ring autoconfig user fastmail.com
-pim-discovery --tls native-tls pacc fastmail.com
-pim-discovery --tls-cert /path/to/extra-root.pem autoconfig user fastmail.com
+pim-discovery --json all user@fastmail.com
+pim-discovery --tls rustls --rustls-crypto ring email autoconfig user@fastmail.com
+pim-discovery --tls native-tls email is-google user@gmail.com
+pim-discovery --tls-cert /path/to/extra-root.pem all user@fastmail.com
 ```
 
 ## FAQ
@@ -230,7 +219,7 @@ pim-discovery --tls-cert /path/to/extra-root.pem autoconfig user fastmail.com
   Use `--log <level>` where `<level>` is one of `off`, `error`, `warn`, `info`, `debug`, `trace`:
 
   ```sh
-  io-pim-discovery --log trace autoconfig user fastmail.com
+  pim-discovery --log trace all user@fastmail.com
   ```
 
   The `RUST_LOG` environment variable, when set, overrides `--log` and supports per-target filters (see the [env_logger](https://docs.rs/env_logger/latest/env_logger/#enabling-logging) documentation). `RUST_BACKTRACE=1` enables full error backtraces.
@@ -238,7 +227,7 @@ pim-discovery --tls-cert /path/to/extra-root.pem autoconfig user fastmail.com
   Logs are written to `stderr`, so they can be redirected easily to a file:
 
   ```sh
-  io-pim-discovery --log trace autoconfig user fastmail.com 2>/tmp/pim-discovery.log
+  pim-discovery --log trace all user@fastmail.com 2>/tmp/pim-discovery.log
   ```
 </details>
 

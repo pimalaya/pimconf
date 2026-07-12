@@ -9,9 +9,6 @@
 //! own transport); [`client`] is the std-blocking reference
 //! orchestrator backing the CLI.
 
-#[cfg(feature = "cli")]
-pub mod cli;
-#[cfg(feature = "stream")]
 pub mod client;
 pub mod collect;
 pub mod providers;

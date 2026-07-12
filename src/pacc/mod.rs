@@ -1,7 +1,5 @@
 //! PACC discovery (draft-ietf-mailmaint-pacc-02).
 
-#[cfg(feature = "cli")]
-pub mod cli;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod discover;

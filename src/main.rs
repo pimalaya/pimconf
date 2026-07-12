@@ -2,15 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
-#[cfg(feature = "autoconfig")]
-use io_pim_discovery::autoconfig::cli::AutoconfigCommand;
-use io_pim_discovery::compose::cli::ComposeCommand;
-#[cfg(feature = "pacc")]
-use io_pim_discovery::pacc::cli::PaccCommand;
-#[cfg(feature = "rfc6186")]
-use io_pim_discovery::rfc6186::cli::SrvCommand;
-#[cfg(feature = "rfc6764")]
-use io_pim_discovery::rfc6764::cli::WebdavCommand;
+use io_pim_discovery::cli::{
+    domain::{CalendarCommand, ContactCommand, EmailCommand, FileCommand},
+    misc::{AllCommand, AuthCommand},
+};
 use pimalaya_cli::{
     clap::{
         args::{JsonFlag, LogFlags},
@@ -52,32 +47,36 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    #[cfg(feature = "autoconfig")]
-    Autoconfig(AutoconfigCommand),
-    #[cfg(feature = "pacc")]
-    Pacc(PaccCommand),
-    Compose(ComposeCommand),
-    #[cfg(feature = "rfc6186")]
-    Srv(SrvCommand),
-    #[cfg(feature = "rfc6764")]
-    Webdav(WebdavCommand),
+    /// Discover every service for an email address, grouped by domain.
+    All(AllCommand),
+    /// Discover email services (IMAP, POP3, SMTP, JMAP).
+    #[command(subcommand)]
+    Email(EmailCommand),
+    /// Discover calendar services (CalDAV, JMAP).
+    #[command(subcommand)]
+    Calendar(CalendarCommand),
+    /// Discover contact services (CardDAV, JMAP).
+    #[command(subcommand)]
+    Contact(ContactCommand),
+    /// Discover file-storage services (WebDAV).
+    #[command(subcommand)]
+    File(FileCommand),
+    /// Probe an endpoint for the authentication methods it advertises.
+    #[command(subcommand)]
+    Auth(AuthCommand),
     Completions(CompletionCommand),
     Manuals(ManualCommand),
 }
 
 impl Command {
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
-        let _ = tls;
         match self {
-            #[cfg(feature = "autoconfig")]
-            Self::Autoconfig(cmd) => cmd.execute(printer, tls),
-            #[cfg(feature = "pacc")]
-            Self::Pacc(cmd) => cmd.execute(printer, tls),
-            Self::Compose(cmd) => cmd.execute(printer, tls),
-            #[cfg(feature = "rfc6186")]
-            Self::Srv(cmd) => cmd.execute(printer),
-            #[cfg(feature = "rfc6764")]
-            Self::Webdav(cmd) => cmd.execute(printer),
+            Self::All(cmd) => cmd.execute(printer, tls),
+            Self::Email(cmd) => cmd.execute(printer, tls),
+            Self::Calendar(cmd) => cmd.execute(printer, tls),
+            Self::Contact(cmd) => cmd.execute(printer, tls),
+            Self::File(cmd) => cmd.execute(printer, tls),
+            Self::Auth(cmd) => cmd.execute(printer, tls),
             Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
             Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
         }

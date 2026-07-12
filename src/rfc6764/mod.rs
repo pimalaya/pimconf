@@ -12,8 +12,6 @@
 //! [`well_known`]: crate::rfc6764::well_known
 //! [`resolve`]: crate::rfc6764::resolve
 
-#[cfg(feature = "cli")]
-pub mod cli;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod discover;

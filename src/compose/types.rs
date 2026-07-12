@@ -15,12 +15,13 @@ use alloc::{
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{
-    autoconfig::types::{AuthenticationType, Autoconfig, SecurityType, ServerType},
-    compose::providers::Provider,
-    pacc::types::PaccConfig,
-    rfc6186::types::{SrvReport, SrvService},
-};
+#[cfg(feature = "autoconfig")]
+use crate::autoconfig::types::{AuthenticationType, Autoconfig, SecurityType, ServerType};
+use crate::compose::providers::Provider;
+#[cfg(feature = "pacc")]
+use crate::pacc::types::PaccConfig;
+#[cfg(feature = "rfc6186")]
+use crate::rfc6186::types::{SrvReport, SrvService};
 
 /// One discovered way to use one service: where to connect, how to
 /// authenticate, and which mechanism found it.
@@ -110,6 +111,7 @@ impl ServiceConfig {
     /// incoming/outgoing server. Servers without a hostname are
     /// skipped; a missing port falls back to the well-known port of
     /// the service and security combination.
+    #[cfg(feature = "autoconfig")]
     pub fn from_autoconfig(config: &Autoconfig, email: &str, source: ConfigSource) -> Vec<Self> {
         let provider = &config.email_provider;
         let servers = provider
@@ -184,6 +186,7 @@ impl ServiceConfig {
     /// Flattens a PACC document into one config per advertised
     /// protocol. PACC mandates implicit TLS for the text protocols,
     /// so their configs use the well-known implicit-TLS ports.
+    #[cfg(feature = "pacc")]
     pub fn from_pacc(config: &PaccConfig) -> Vec<Self> {
         let mut auth = Vec::new();
 
@@ -251,6 +254,7 @@ impl ServiceConfig {
     /// advertise no authentication data, so password login is
     /// assumed; `_imaps` maps to implicit TLS, `_imap` and
     /// `_submission` to STARTTLS.
+    #[cfg(feature = "rfc6186")]
     pub fn from_srv(report: &SrvReport) -> Vec<Self> {
         let services = [
             (Service::Imap, &report.imaps, Security::Tls),
@@ -527,6 +531,7 @@ pub enum ConfigSource {
 
 /// Substitutes the Mozilla autoconfig placeholders (%EMAILADDRESS%,
 /// %EMAILLOCALPART%, %EMAILDOMAIN%) in a hostname or username value.
+#[cfg(feature = "autoconfig")]
 fn substitute(value: &str, email: &str) -> String {
     let (local_part, domain) = email.split_once('@').unwrap_or((email, ""));
 
@@ -538,6 +543,7 @@ fn substitute(value: &str, email: &str) -> String {
 
 /// Returns the well-known port for a service and security
 /// combination, used when a mechanism omits the port.
+#[cfg(feature = "autoconfig")]
 fn default_port(service: Service, security: Security) -> Option<u16> {
     match (service, security) {
         (Service::Imap, Security::Tls) => Some(993),

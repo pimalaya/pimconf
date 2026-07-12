@@ -1,7 +1,5 @@
 //! Mozilla Thunderbird autoconfiguration discovery.
 
-#[cfg(feature = "cli")]
-pub mod cli;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod isp;

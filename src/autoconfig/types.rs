@@ -248,7 +248,7 @@ impl fmt::Display for OAuth2Config {
         writeln!(f, "  {:11}{}", "Issuer", self.issuer)?;
         writeln!(f, "  {:11}{}", "Scope", self.scope)?;
         writeln!(f, "  {:11}{}", "Auth URL", self.auth_url)?;
-        write!(f, "  {:11}{}", "Token URL", self.token_url)
+        writeln!(f, "  {:11}{}", "Token URL", self.token_url)
     }
 }
 
