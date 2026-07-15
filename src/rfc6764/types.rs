@@ -10,14 +10,14 @@ use crate::rfc6186::types::SrvService;
 /// CalDAV vs CardDAV: selects the SRV service labels and the
 /// `.well-known` path used by RFC 6764 discovery.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum DavService {
+pub enum DiscoveryDavService {
     /// CalDAV (`_caldav(s)._tcp`, `/.well-known/caldav`).
     Caldav,
     /// CardDAV (`_carddav(s)._tcp`, `/.well-known/carddav`).
     Carddav,
 }
 
-impl DavService {
+impl DiscoveryDavService {
     /// The `.well-known` request path, leading slash included
     /// (RFC 6764 §5).
     pub fn well_known_path(self) -> &'static str {

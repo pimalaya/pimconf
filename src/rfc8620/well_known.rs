@@ -1,6 +1,6 @@
 //! # `.well-known/jmap` session probe (RFC 8620 §2.2)
 //!
-//! [`WellKnownJmap`] GETs `<origin>/.well-known/jmap` and follows any
+//! [`DiscoveryJmapWellKnown`] GETs `<origin>/.well-known/jmap` and follows any
 //! redirect chain (RFC 8620 locates the session resource "following
 //! any redirects"; apex domains routinely bounce through marketing
 //! hosts), then reports the JMAP Session resource from the terminal
@@ -32,9 +32,9 @@ use crate::{
 /// Redirect hops followed before giving up on a looping chain.
 const MAX_HOPS: u8 = 5;
 
-/// Errors emitted by [`WellKnownJmap`].
+/// Errors emitted by [`DiscoveryJmapWellKnown`].
 #[derive(Debug, Error)]
-pub enum WellKnownJmapError {
+pub enum DiscoveryJmapWellKnownError {
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }
@@ -54,13 +54,13 @@ pub struct JmapSessionResource {
 /// the matching HTTPS stream, hopping streams when a redirect crosses
 /// origins. Completes with the session resource, or `None` when the
 /// origin serves no JMAP.
-pub struct WellKnownJmap {
+pub struct DiscoveryJmapWellKnown {
     target: Url,
     hops: u8,
     probe: Http11WellKnown,
 }
 
-impl WellKnownJmap {
+impl DiscoveryJmapWellKnown {
     /// Builds a probe against `origin`, a scheme + host + port root
     /// such as `https://api.example.com/`.
     pub fn new(origin: Url) -> Self {
@@ -81,9 +81,9 @@ impl WellKnownJmap {
     }
 }
 
-impl DiscoveryCoroutine for WellKnownJmap {
+impl DiscoveryCoroutine for DiscoveryJmapWellKnown {
     type Yield = DiscoveryYield;
-    type Return = Result<Option<JmapSessionResource>, WellKnownJmapError>;
+    type Return = Result<Option<JmapSessionResource>, DiscoveryJmapWellKnownError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.probe.resume(arg) {

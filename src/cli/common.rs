@@ -14,31 +14,34 @@ use pimalaya_stream::tls::Tls;
 
 use crate::{
     compose::{
-        client::ComposeClientStd,
+        client::DiscoveryComposeClientStd,
         providers::Provider,
-        types::{AuthMethod, ConfigSource, Endpoint, Security, Service, ServiceConfig},
+        types::{
+            ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint,
+            Security,
+        },
     },
     shared::dns::{DNS_SERVER, resolver_url},
 };
 
 /// Services of the email domain (JMAP included: it serves mail too;
 /// ManageSieve manages server-side mail filters).
-pub const EMAIL: &[Service] = &[
-    Service::Imap,
-    Service::Pop3,
-    Service::Smtp,
-    Service::Jmap,
-    Service::Managesieve,
+pub const EMAIL: &[DiscoveryService] = &[
+    DiscoveryService::Imap,
+    DiscoveryService::Pop3,
+    DiscoveryService::Smtp,
+    DiscoveryService::Jmap,
+    DiscoveryService::Managesieve,
 ];
 
 /// Services of the calendar domain (JMAP reused across domains).
-pub const CALENDAR: &[Service] = &[Service::Caldav, Service::Jmap];
+pub const CALENDAR: &[DiscoveryService] = &[DiscoveryService::Caldav, DiscoveryService::Jmap];
 
 /// Services of the contact domain (JMAP reused across domains).
-pub const CONTACT: &[Service] = &[Service::Carddav, Service::Jmap];
+pub const CONTACT: &[DiscoveryService] = &[DiscoveryService::Carddav, DiscoveryService::Jmap];
 
 /// Services of the file domain (generic WebDAV file storage).
-pub const FILE: &[Service] = &[Service::Webdav];
+pub const FILE: &[DiscoveryService] = &[DiscoveryService::Webdav];
 
 /// DNS resolver flag shared by every discovery command.
 #[derive(Debug, Args)]
@@ -52,8 +55,8 @@ pub struct ServerArg {
 impl ServerArg {
     /// Builds a compose client resolving DNS through the flag and
     /// running the HTTPS mechanisms over `tls`.
-    pub fn client(&self, tls: &Tls) -> Result<ComposeClientStd> {
-        Ok(ComposeClientStd::new(
+    pub fn client(&self, tls: &Tls) -> Result<DiscoveryComposeClientStd> {
+        Ok(DiscoveryComposeClientStd::new(
             resolver_url(&self.server)?,
             tls.clone(),
         ))
@@ -61,7 +64,10 @@ impl ServerArg {
 }
 
 /// Keeps only the configs whose service belongs to `services`.
-pub fn only(configs: Vec<ServiceConfig>, services: &[Service]) -> Vec<ServiceConfig> {
+pub fn only(
+    configs: Vec<DiscoveryServiceConfig>,
+    services: &[DiscoveryService],
+) -> Vec<DiscoveryServiceConfig> {
     configs
         .into_iter()
         .filter(|config| services.contains(&config.service))
@@ -72,7 +78,7 @@ pub fn only(configs: Vec<ServiceConfig>, services: &[Service]) -> Vec<ServiceCon
 /// list.
 #[derive(serde::Serialize)]
 #[serde(transparent)]
-pub struct ConfigsOutput(pub Vec<ServiceConfig>);
+pub struct ConfigsOutput(pub Vec<DiscoveryServiceConfig>);
 
 impl fmt::Display for ConfigsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -82,7 +88,7 @@ impl fmt::Display for ConfigsOutput {
 
 /// Renders a service-config table: SERVICE, ENDPOINT, USERNAME, AUTH
 /// and the SOURCE mechanism that produced each row.
-pub fn table(configs: &[ServiceConfig]) -> Table {
+pub fn table(configs: &[DiscoveryServiceConfig]) -> Table {
     let mut table = Table::new();
 
     table
@@ -110,16 +116,16 @@ pub fn table(configs: &[ServiceConfig]) -> Table {
 }
 
 /// Lowercase wire name of a service.
-pub fn service_name(service: Service) -> &'static str {
+pub fn service_name(service: DiscoveryService) -> &'static str {
     match service {
-        Service::Imap => "imap",
-        Service::Pop3 => "pop3",
-        Service::Smtp => "smtp",
-        Service::Jmap => "jmap",
-        Service::Caldav => "caldav",
-        Service::Carddav => "carddav",
-        Service::Webdav => "webdav",
-        Service::Managesieve => "managesieve",
+        DiscoveryService::Imap => "imap",
+        DiscoveryService::Pop3 => "pop3",
+        DiscoveryService::Smtp => "smtp",
+        DiscoveryService::Jmap => "jmap",
+        DiscoveryService::Caldav => "caldav",
+        DiscoveryService::Carddav => "carddav",
+        DiscoveryService::Webdav => "webdav",
+        DiscoveryService::Managesieve => "managesieve",
     }
 }
 
@@ -141,7 +147,7 @@ fn endpoint_label(endpoint: &Endpoint) -> String {
     }
 }
 
-fn auth_label(methods: &[AuthMethod]) -> String {
+fn auth_label(methods: &[DiscoveryAuthMethod]) -> String {
     if methods.is_empty() {
         return "-".to_string();
     }
@@ -149,13 +155,15 @@ fn auth_label(methods: &[AuthMethod]) -> String {
     methods
         .iter()
         .map(|method| match method {
-            AuthMethod::Password => "password".to_string(),
-            AuthMethod::Bearer => "bearer".to_string(),
-            AuthMethod::OauthAuthorizationCodeGrant { .. } => {
+            DiscoveryAuthMethod::Password => "password".to_string(),
+            DiscoveryAuthMethod::Bearer => "bearer".to_string(),
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant { .. } => {
                 "oauth2:authorization-code".to_string()
             }
-            AuthMethod::OauthDeviceAuthorizationGrant { .. } => "oauth2:device".to_string(),
-            AuthMethod::OauthIssuer(issuer) => format!("oauth2:{issuer}"),
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { .. } => {
+                "oauth2:device".to_string()
+            }
+            DiscoveryAuthMethod::OauthIssuer(issuer) => format!("oauth2:{issuer}"),
         })
         .collect::<Vec<_>>()
         .join(", ")

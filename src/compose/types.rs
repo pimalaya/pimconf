@@ -1,10 +1,10 @@
 //! # Unified compose types
 //!
 //! The compose module reduces every discovery mechanism to one common
-//! output: a list of [`ServiceConfig`], each describing one way to
+//! output: a list of [`DiscoveryServiceConfig`], each describing one way to
 //! reach one service (endpoint, login, authentication methods),
 //! tagged with the mechanism that produced it. Conversion helpers on
-//! [`ServiceConfig`] flatten each mechanism's native document into
+//! [`DiscoveryServiceConfig`] flatten each mechanism's native document into
 //! that shape.
 
 use alloc::{
@@ -27,9 +27,9 @@ use crate::rfc6186::types::{SrvReport, SrvService};
 /// authenticate, and which mechanism found it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ServiceConfig {
+pub struct DiscoveryServiceConfig {
     /// The service this config describes.
-    pub service: Service,
+    pub service: DiscoveryService,
 
     /// Where to reach the service.
     pub endpoint: Endpoint,
@@ -39,13 +39,13 @@ pub struct ServiceConfig {
     pub username: Option<String>,
 
     /// The authentication methods the service accepts.
-    pub auth: Vec<AuthMethod>,
+    pub auth: Vec<DiscoveryAuthMethod>,
 
     /// The mechanism that produced this config.
     pub source: ConfigSource,
 }
 
-impl ServiceConfig {
+impl DiscoveryServiceConfig {
     /// The URLs whose unauthenticated 401 may advertise the config's
     /// schemes (to feed [`refine_auth`]): the HTTP endpoint itself,
     /// then the service's well-known path for the DAV services (some
@@ -63,8 +63,8 @@ impl ServiceConfig {
 
         let mut urls = vec![url.clone()];
         let well_known = match self.service {
-            Service::Caldav => Some("/.well-known/caldav"),
-            Service::Carddav => Some("/.well-known/carddav"),
+            DiscoveryService::Caldav => Some("/.well-known/caldav"),
+            DiscoveryService::Carddav => Some("/.well-known/carddav"),
             _ => None,
         };
         if let Some(path) = well_known {
@@ -89,8 +89,8 @@ impl ServiceConfig {
 
         for scheme in schemes {
             match scheme.as_str() {
-                "basic" => auth.push(AuthMethod::Password),
-                "bearer" => auth.push(AuthMethod::Bearer),
+                "basic" => auth.push(DiscoveryAuthMethod::Password),
+                "bearer" => auth.push(DiscoveryAuthMethod::Bearer),
                 _ => (),
             }
         }
@@ -99,7 +99,10 @@ impl ServiceConfig {
         }
 
         for method in self.auth.drain(..) {
-            let probed = matches!(method, AuthMethod::Password | AuthMethod::Bearer);
+            let probed = matches!(
+                method,
+                DiscoveryAuthMethod::Password | DiscoveryAuthMethod::Bearer
+            );
             if !probed && !auth.contains(&method) {
                 auth.push(method);
             }
@@ -127,9 +130,9 @@ impl ServiceConfig {
             };
 
             let service = match server.r#type {
-                ServerType::Imap => Service::Imap,
-                ServerType::Pop3 => Service::Pop3,
-                ServerType::Smtp => Service::Smtp,
+                ServerType::Imap => DiscoveryService::Imap,
+                ServerType::Pop3 => DiscoveryService::Pop3,
+                ServerType::Smtp => DiscoveryService::Smtp,
             };
 
             let security = match server.socket_type {
@@ -147,13 +150,13 @@ impl ServiceConfig {
             for method in &server.authentication {
                 let method = match method {
                     AuthenticationType::PasswordCleartext
-                    | AuthenticationType::PasswordEncrypted => AuthMethod::Password,
+                    | AuthenticationType::PasswordEncrypted => DiscoveryAuthMethod::Password,
                     AuthenticationType::OAuth2 => {
                         let Some(oauth) = &config.oauth2 else {
                             continue;
                         };
 
-                        AuthMethod::OauthAuthorizationCodeGrant {
+                        DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
                             authorization_endpoint: oauth.auth_url.clone(),
                             token_endpoint: oauth.token_url.clone(),
                             scope: Some(oauth.scope.clone()),
@@ -191,21 +194,21 @@ impl ServiceConfig {
         let mut auth = Vec::new();
 
         if let Some(oauth) = &config.authentication.oauth_public {
-            auth.push(AuthMethod::OauthIssuer(oauth.issuer.clone()));
+            auth.push(DiscoveryAuthMethod::OauthIssuer(oauth.issuer.clone()));
         }
 
         if config.authentication.password == Some(true) {
-            auth.push(AuthMethod::Password);
+            auth.push(DiscoveryAuthMethod::Password);
         }
 
         let protocols = &config.protocols;
         let mut configs = Vec::new();
 
         let tcp_protocols = [
-            (Service::Imap, &protocols.imap, 993),
-            (Service::Pop3, &protocols.pop3, 995),
-            (Service::Smtp, &protocols.smtp, 465),
-            (Service::Managesieve, &protocols.managesieve, 4190),
+            (DiscoveryService::Imap, &protocols.imap, 993),
+            (DiscoveryService::Pop3, &protocols.pop3, 995),
+            (DiscoveryService::Smtp, &protocols.smtp, 465),
+            (DiscoveryService::Managesieve, &protocols.managesieve, 4190),
         ];
 
         for (service, protocol, port) in tcp_protocols {
@@ -227,10 +230,10 @@ impl ServiceConfig {
         }
 
         let http_protocols = [
-            (Service::Jmap, &protocols.jmap),
-            (Service::Caldav, &protocols.caldav),
-            (Service::Carddav, &protocols.carddav),
-            (Service::Webdav, &protocols.webdav),
+            (DiscoveryService::Jmap, &protocols.jmap),
+            (DiscoveryService::Caldav, &protocols.caldav),
+            (DiscoveryService::Carddav, &protocols.carddav),
+            (DiscoveryService::Webdav, &protocols.webdav),
         ];
 
         for (service, protocol) in http_protocols {
@@ -257,9 +260,13 @@ impl ServiceConfig {
     #[cfg(feature = "rfc6186")]
     pub fn from_srv(report: &SrvReport) -> Vec<Self> {
         let services = [
-            (Service::Imap, &report.imaps, Security::Tls),
-            (Service::Imap, &report.imap, Security::Starttls),
-            (Service::Smtp, &report.submission, Security::Starttls),
+            (DiscoveryService::Imap, &report.imaps, Security::Tls),
+            (DiscoveryService::Imap, &report.imap, Security::Starttls),
+            (
+                DiscoveryService::Smtp,
+                &report.submission,
+                Security::Starttls,
+            ),
         ];
 
         let mut configs = Vec::new();
@@ -283,7 +290,7 @@ impl ServiceConfig {
                     security,
                 },
                 username: None,
-                auth: vec![AuthMethod::Password],
+                auth: vec![DiscoveryAuthMethod::Password],
                 source: ConfigSource::Srv,
             });
         }
@@ -294,12 +301,12 @@ impl ServiceConfig {
     /// Wraps an RFC 6764 context root into a single config. DAV
     /// discovery advertises no authentication data, so password login
     /// is assumed.
-    pub fn from_dav(service: Service, url: impl ToString) -> Self {
+    pub fn from_dav(service: DiscoveryService, url: impl ToString) -> Self {
         Self {
             service,
             endpoint: Endpoint::Http(url.to_string()),
             username: None,
-            auth: vec![AuthMethod::Password],
+            auth: vec![DiscoveryAuthMethod::Password],
             source: ConfigSource::Dav,
         }
     }
@@ -317,18 +324,18 @@ impl ServiceConfig {
 
         for scheme in schemes {
             match scheme.as_str() {
-                "basic" => auth.push(AuthMethod::Password),
-                "bearer" => auth.push(AuthMethod::Bearer),
+                "basic" => auth.push(DiscoveryAuthMethod::Password),
+                "bearer" => auth.push(DiscoveryAuthMethod::Bearer),
                 _ => (),
             }
         }
 
         if auth.is_empty() {
-            auth = vec![AuthMethod::Bearer, AuthMethod::Password];
+            auth = vec![DiscoveryAuthMethod::Bearer, DiscoveryAuthMethod::Password];
         }
 
         Self {
-            service: Service::Jmap,
+            service: DiscoveryService::Jmap,
             endpoint: Endpoint::Http(url.to_string()),
             username: None,
             auth,
@@ -340,7 +347,7 @@ impl ServiceConfig {
 /// A PIM service kind.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum Service {
+pub enum DiscoveryService {
     Imap,
     Pop3,
     Smtp,
@@ -409,17 +416,19 @@ impl Endpoint {
 mod tests {
     use alloc::{string::ToString, vec};
 
-    use crate::compose::types::{AuthMethod, ConfigSource, Endpoint, Service, ServiceConfig};
+    use crate::compose::types::{
+        ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint,
+    };
 
     #[test]
     fn probed_schemes_beat_account_level_claims() {
-        let mut config = ServiceConfig {
-            service: Service::Jmap,
+        let mut config = DiscoveryServiceConfig {
+            service: DiscoveryService::Jmap,
             endpoint: Endpoint::Http("https://api.example.com/jmap/session".to_string()),
             username: None,
             auth: vec![
-                AuthMethod::OauthIssuer("https://api.example.com".to_string()),
-                AuthMethod::Password,
+                DiscoveryAuthMethod::OauthIssuer("https://api.example.com".to_string()),
+                DiscoveryAuthMethod::Password,
             ],
             source: ConfigSource::Pacc,
         };
@@ -430,14 +439,14 @@ mod tests {
         assert_eq!(
             config.auth,
             vec![
-                AuthMethod::Bearer,
-                AuthMethod::OauthIssuer("https://api.example.com".to_string()),
+                DiscoveryAuthMethod::Bearer,
+                DiscoveryAuthMethod::OauthIssuer("https://api.example.com".to_string()),
             ],
         );
 
         // Unknown schemes leave the config as discovered.
         config.refine_auth(&["negotiate".to_string()]);
-        assert!(config.auth.contains(&AuthMethod::Bearer));
+        assert!(config.auth.contains(&DiscoveryAuthMethod::Bearer));
     }
 
     #[test]
@@ -478,7 +487,7 @@ pub enum Security {
 /// How a client can authenticate against a service.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AuthMethod {
+pub enum DiscoveryAuthMethod {
     /// Username and password login (possibly an app password).
     Password,
 
@@ -544,16 +553,16 @@ fn substitute(value: &str, email: &str) -> String {
 /// Returns the well-known port for a service and security
 /// combination, used when a mechanism omits the port.
 #[cfg(feature = "autoconfig")]
-fn default_port(service: Service, security: Security) -> Option<u16> {
+fn default_port(service: DiscoveryService, security: Security) -> Option<u16> {
     match (service, security) {
-        (Service::Imap, Security::Tls) => Some(993),
-        (Service::Imap, _) => Some(143),
-        (Service::Pop3, Security::Tls) => Some(995),
-        (Service::Pop3, _) => Some(110),
-        (Service::Smtp, Security::Tls) => Some(465),
-        (Service::Smtp, Security::Starttls) => Some(587),
-        (Service::Smtp, Security::Plain) => Some(25),
-        (Service::Managesieve, _) => Some(4190),
+        (DiscoveryService::Imap, Security::Tls) => Some(993),
+        (DiscoveryService::Imap, _) => Some(143),
+        (DiscoveryService::Pop3, Security::Tls) => Some(995),
+        (DiscoveryService::Pop3, _) => Some(110),
+        (DiscoveryService::Smtp, Security::Tls) => Some(465),
+        (DiscoveryService::Smtp, Security::Starttls) => Some(587),
+        (DiscoveryService::Smtp, Security::Plain) => Some(25),
+        (DiscoveryService::Managesieve, _) => Some(4190),
         _ => None,
     }
 }

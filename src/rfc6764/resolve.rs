@@ -1,6 +1,6 @@
 //! # Combined RFC 6764 resolve coroutine
 //!
-//! [`ResolveDav`] turns a bare domain into a CalDAV/CardDAV context
+//! [`DiscoveryDavResolve`] turns a bare domain into a CalDAV/CardDAV context
 //! root by chaining the three RFC 6764 mechanisms:
 //!
 //! 1. SRV lookups (§3), picking the best record for the requested
@@ -18,9 +18,9 @@
 //! Composing the DNS steps (over the `tcp://` resolver) and the HTTPS
 //! well-known step in one coroutine works because every yield carries
 //! its endpoint URL: the std client routes each step through the
-//! matching stream in its [`StreamPool`].
+//! matching stream in its [`DiscoveryStreamPool`].
 //!
-//! [`StreamPool`]: crate::shared::pool::StreamPool
+//! [`DiscoveryStreamPool`]: crate::shared::pool::DiscoveryStreamPool
 
 use core::mem;
 
@@ -39,20 +39,20 @@ use crate::{
     rfc6764::{
         discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
         txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
-        types::DavService,
-        well_known::{WellKnown, WellKnownError},
+        types::DiscoveryDavService,
+        well_known::{DiscoveryWellKnown, DiscoveryWellKnownError},
     },
 };
 
-/// Errors emitted by [`ResolveDav`].
+/// Errors emitted by [`DiscoveryDavResolve`].
 #[derive(Debug, Error)]
-pub enum ResolveDavError {
+pub enum DiscoveryDavResolveError {
     #[error(transparent)]
     Srv(#[from] DiscoveryWebdavSrvError),
     #[error(transparent)]
     Txt(#[from] DiscoveryWebdavTxtError),
     #[error(transparent)]
-    WellKnown(#[from] WellKnownError),
+    DiscoveryWellKnown(#[from] DiscoveryWellKnownError),
     #[error("RFC 6764 resolve built an invalid origin URL `{0}`: {1}")]
     InvalidOrigin(String, #[source] url::ParseError),
     #[error("RFC 6764 resolve could not apply TXT path `{0}`: {1}")]
@@ -60,18 +60,18 @@ pub enum ResolveDavError {
 }
 
 /// I/O-free `domain -> DAV context root` resolver.
-pub struct ResolveDav {
-    service: DavService,
+pub struct DiscoveryDavResolve {
+    service: DiscoveryDavService,
     domain: String,
     resolver: Url,
     state: State,
 }
 
-impl ResolveDav {
+impl DiscoveryDavResolve {
     /// Builds a resolver for `service` on `domain`. `resolver` is the
     /// `tcp://host:port` DNS-over-TCP resolver URL used for the SRV
     /// and TXT lookups.
-    pub fn new(domain: impl AsRef<str>, service: DavService, resolver: Url) -> Self {
+    pub fn new(domain: impl AsRef<str>, service: DiscoveryDavService, resolver: Url) -> Self {
         let domain = domain.as_ref().trim_matches('.').to_string();
         let srv = DiscoveryWebdavSrv::new(&domain, resolver.clone());
 
@@ -87,7 +87,7 @@ impl ResolveDav {
         &self,
         secure: Option<SrvService>,
         plain: Option<SrvService>,
-    ) -> Result<Url, ResolveDavError> {
+    ) -> Result<Url, DiscoveryDavResolveError> {
         let (scheme, host, port) = match (secure, plain) {
             (Some(s), _) => ("https", s.host, s.port),
             (None, Some(p)) => ("http", p.host, p.port),
@@ -95,21 +95,21 @@ impl ResolveDav {
         };
 
         let raw = format!("{scheme}://{host}:{port}/");
-        Url::parse(&raw).map_err(|err| ResolveDavError::InvalidOrigin(raw, err))
+        Url::parse(&raw).map_err(|err| DiscoveryDavResolveError::InvalidOrigin(raw, err))
     }
 }
 
-impl DiscoveryCoroutine for ResolveDav {
+impl DiscoveryCoroutine for DiscoveryDavResolve {
     type Yield = DiscoveryYield;
-    type Return = Result<Url, ResolveDavError>;
+    type Return = Result<Url, DiscoveryDavResolveError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
             State::Srv(mut srv) => match srv.resume(arg) {
                 DiscoveryCoroutineState::Complete(Ok(report)) => {
                     let (secure, plain) = match self.service {
-                        DavService::Caldav => (report.caldavs, report.caldav),
-                        DavService::Carddav => (report.carddavs, report.carddav),
+                        DiscoveryDavService::Caldav => (report.caldavs, report.caldav),
+                        DiscoveryDavService::Carddav => (report.carddavs, report.carddav),
                     };
 
                     // RFC 6764 §6 only queries the TXT `path` record for
@@ -132,8 +132,8 @@ impl DiscoveryCoroutine for ResolveDav {
                             State::Txt { txt, origin }
                         }
                         None => {
-                            let probe = WellKnown::new(origin.clone(), self.service);
-                            State::WellKnown { probe, origin }
+                            let probe = DiscoveryWellKnown::new(origin.clone(), self.service);
+                            State::DiscoveryWellKnown { probe, origin }
                         }
                     };
                     self.resume(None)
@@ -156,8 +156,8 @@ impl DiscoveryCoroutine for ResolveDav {
                         Err(err) => return DiscoveryCoroutineState::Complete(Err(err)),
                     };
 
-                    let probe = WellKnown::new(origin.clone(), self.service);
-                    self.state = State::WellKnown { probe, origin };
+                    let probe = DiscoveryWellKnown::new(origin.clone(), self.service);
+                    self.state = State::DiscoveryWellKnown { probe, origin };
                     self.resume(None)
                 }
             },
@@ -165,12 +165,12 @@ impl DiscoveryCoroutine for ResolveDav {
                 DiscoveryCoroutineState::Complete(Ok(Some(path))) => match origin.join(&path) {
                     Ok(root) => DiscoveryCoroutineState::Complete(Ok(root)),
                     Err(err) => DiscoveryCoroutineState::Complete(Err(
-                        ResolveDavError::InvalidPath(path, err),
+                        DiscoveryDavResolveError::InvalidPath(path, err),
                     )),
                 },
                 DiscoveryCoroutineState::Complete(Ok(None)) => {
-                    let probe = WellKnown::new(origin.clone(), self.service);
-                    self.state = State::WellKnown { probe, origin };
+                    let probe = DiscoveryWellKnown::new(origin.clone(), self.service);
+                    self.state = State::DiscoveryWellKnown { probe, origin };
                     self.resume(None)
                 }
                 DiscoveryCoroutineState::Yielded(y) => {
@@ -181,19 +181,19 @@ impl DiscoveryCoroutine for ResolveDav {
                     DiscoveryCoroutineState::Complete(Err(err.into()))
                 }
             },
-            State::WellKnown { mut probe, origin } => match probe.resume(arg) {
+            State::DiscoveryWellKnown { mut probe, origin } => match probe.resume(arg) {
                 DiscoveryCoroutineState::Complete(Ok(url)) => {
                     DiscoveryCoroutineState::Complete(Ok(url.unwrap_or(origin)))
                 }
                 DiscoveryCoroutineState::Yielded(y) => {
-                    self.state = State::WellKnown { probe, origin };
+                    self.state = State::DiscoveryWellKnown { probe, origin };
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
                     DiscoveryCoroutineState::Complete(Err(err.into()))
                 }
             },
-            State::Done => panic!("ResolveDav::resume called after completion"),
+            State::Done => panic!("DiscoveryDavResolve::resume called after completion"),
         }
     }
 }
@@ -205,8 +205,8 @@ enum State {
         txt: DiscoveryWebdavTxt,
         origin: Url,
     },
-    WellKnown {
-        probe: WellKnown,
+    DiscoveryWellKnown {
+        probe: DiscoveryWellKnown,
         origin: Url,
     },
     #[default]

@@ -1,6 +1,6 @@
 //! # Shared DNS module
 //!
-//! [`DnsExchange`] carries one DNS message to the resolver and back,
+//! [`DiscoveryDnsExchange`] carries one DNS message to the resolver and back,
 //! picking the transport from the resolver URL scheme: RFC 1035
 //! §4.2.2 length-prefixed framing over a `tcp://host:port` resolver,
 //! or an RFC 8484 DNS-over-HTTPS POST against an
@@ -74,7 +74,7 @@ pub(crate) const DNS_QUERY_BUF_SIZE: usize = 4 * 1024;
 
 /// Errors that can occur during a single DNS message exchange.
 #[derive(Debug, Error)]
-pub enum DnsExchangeError {
+pub enum DiscoveryDnsExchangeError {
     #[error("DNS stream reached EOF before a full response")]
     Eof,
     #[error("DNS-over-HTTPS exchange failed")]
@@ -90,7 +90,7 @@ pub enum DnsExchangeError {
 /// as `application/dns-message`). Completes with the bare response
 /// message bytes.
 #[derive(Debug)]
-pub struct DnsExchange {
+pub struct DiscoveryDnsExchange {
     resolver: Url,
     state: ExchangeState,
 }
@@ -109,7 +109,7 @@ enum ExchangeState {
     Done,
 }
 
-impl DnsExchange {
+impl DiscoveryDnsExchange {
     /// Builds an exchange of the bare DNS query `message` (no TCP
     /// length prefix) against `resolver`.
     pub fn new(message: Vec<u8>, resolver: Url) -> Self {
@@ -139,9 +139,9 @@ impl DnsExchange {
     }
 }
 
-impl DiscoveryCoroutine for DnsExchange {
+impl DiscoveryCoroutine for DiscoveryDnsExchange {
     type Yield = DiscoveryYield;
-    type Return = Result<Vec<u8>, DnsExchangeError>;
+    type Return = Result<Vec<u8>, DiscoveryDnsExchangeError>;
 
     fn resume(
         &mut self,
@@ -158,7 +158,9 @@ impl DiscoveryCoroutine for DnsExchange {
             ExchangeState::TcpRead(mut response) => {
                 if let Some(bytes) = arg.take() {
                     if bytes.is_empty() {
-                        return DiscoveryCoroutineState::Complete(Err(DnsExchangeError::Eof));
+                        return DiscoveryCoroutineState::Complete(Err(
+                            DiscoveryDnsExchangeError::Eof,
+                        ));
                     }
 
                     response.extend_from_slice(bytes);
@@ -196,24 +198,24 @@ impl DiscoveryCoroutine for DnsExchange {
                 // NOTE: a DoH endpoint has no business redirecting a
                 // POSTed query; surface the status instead of chasing.
                 HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { response, .. }) => {
-                    DiscoveryCoroutineState::Complete(Err(DnsExchangeError::HttpStatus(
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryDnsExchangeError::HttpStatus(
                         *response.status,
                     )))
                 }
                 HttpCoroutineState::Complete(Ok(out)) => {
                     if !out.response.status.is_success() {
                         return DiscoveryCoroutineState::Complete(Err(
-                            DnsExchangeError::HttpStatus(*out.response.status),
+                            DiscoveryDnsExchangeError::HttpStatus(*out.response.status),
                         ));
                     }
 
                     DiscoveryCoroutineState::Complete(Ok(out.response.body))
                 }
                 HttpCoroutineState::Complete(Err(err)) => {
-                    DiscoveryCoroutineState::Complete(Err(DnsExchangeError::Http(err)))
+                    DiscoveryCoroutineState::Complete(Err(DiscoveryDnsExchangeError::Http(err)))
                 }
             },
-            ExchangeState::Done => panic!("DnsExchange::resume called after completion"),
+            ExchangeState::Done => panic!("DiscoveryDnsExchange::resume called after completion"),
         }
     }
 }
@@ -233,7 +235,7 @@ pub enum DiscoveryDnsTxtError {
     #[error("DNS TXT stream reached EOF before a full response")]
     Eof,
     #[error("DNS TXT exchange failed")]
-    Exchange(#[source] DnsExchangeError),
+    Exchange(#[source] DiscoveryDnsExchangeError),
 }
 
 /// Internal state of the [`DiscoveryDnsTxt`] coroutine.
@@ -242,7 +244,7 @@ enum State {
     /// First step: the coroutine still has to build the query message.
     BuildQuery,
     /// The query is travelling to the resolver and back.
-    Exchange(DnsExchange),
+    Exchange(DiscoveryDnsExchange),
     /// `Complete` has already been returned.
     #[default]
     Done,
@@ -314,7 +316,7 @@ impl DiscoveryCoroutine for DiscoveryDnsTxt {
                 }
 
                 let message = builder.finish().as_bytes().to_vec();
-                let exchange = DnsExchange::new(message, self.resolver.clone());
+                let exchange = DiscoveryDnsExchange::new(message, self.resolver.clone());
 
                 self.state = State::Exchange(exchange);
                 self.resume(None)
@@ -325,7 +327,7 @@ impl DiscoveryCoroutine for DiscoveryDnsTxt {
                     self.state = State::Exchange(exchange);
                     DiscoveryCoroutineState::Yielded(y)
                 }
-                DiscoveryCoroutineState::Complete(Err(DnsExchangeError::Eof)) => {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryDnsExchangeError::Eof)) => {
                     DiscoveryCoroutineState::Complete(Err(DiscoveryDnsTxtError::Eof))
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
@@ -424,9 +426,9 @@ fn system_nameserver() -> Option<IpAddr> {
 mod tests {
     use alloc::string::String;
 
-    use super::*;
+    use crate::shared::dns::*;
 
-    fn resume_write(exchange: &mut DnsExchange) -> Vec<u8> {
+    fn resume_write(exchange: &mut DiscoveryDnsExchange) -> Vec<u8> {
         match exchange.resume(None) {
             DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsWrite { bytes, .. }) => bytes,
             state => panic!("expected WantsWrite, got {state:?}"),
@@ -436,7 +438,7 @@ mod tests {
     #[test]
     fn tcp_resolver_frames_with_length_prefix() {
         let resolver = "tcp://1.1.1.1:53".parse().unwrap();
-        let mut exchange = DnsExchange::new(vec![0xAB; 5], resolver);
+        let mut exchange = DiscoveryDnsExchange::new(vec![0xAB; 5], resolver);
 
         let bytes = resume_write(&mut exchange);
         assert_eq!(bytes[..2], [0, 5]);
@@ -446,7 +448,7 @@ mod tests {
     #[test]
     fn tcp_response_prefix_is_stripped() {
         let resolver = "tcp://1.1.1.1:53".parse().unwrap();
-        let mut exchange = DnsExchange::new(vec![0xAB; 5], resolver);
+        let mut exchange = DiscoveryDnsExchange::new(vec![0xAB; 5], resolver);
 
         resume_write(&mut exchange);
         let reply = [&[0u8, 3][..], &[1, 2, 3][..]].concat();
@@ -459,7 +461,7 @@ mod tests {
     #[test]
     fn https_resolver_posts_rfc8484_message() {
         let resolver = "https://cloudflare-dns.com/dns-query".parse().unwrap();
-        let mut exchange = DnsExchange::new(vec![0xAB; 5], resolver);
+        let mut exchange = DiscoveryDnsExchange::new(vec![0xAB; 5], resolver);
 
         let bytes = resume_write(&mut exchange);
         let request = String::from_utf8_lossy(&bytes);

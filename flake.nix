@@ -1,5 +1,5 @@
 {
-  description = "CLI and lib to discover PIM-related services, written in Rust";
+  description = "PIM discovery CLI and client library for Rust";
 
   inputs = {
     nixpkgs = {

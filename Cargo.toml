@@ -1,6 +1,6 @@
 [package]
 name = "io-pim-discovery"
-description = "CLI and lib to discover PIM-related services"
+description = "PIM discovery CLI and client library for Rust"
 version = "0.2.0"
 authors = ["soywod <pimalaya.org@posteo.net>"]
 rust-version = "1.87"
@@ -13,7 +13,7 @@ documentation = "https://docs.rs/io-pim-discovery/latest/io_pim_discovery"
 repository = "https://github.com/pimalaya/io-pim-discovery"
 
 [package.metadata.docs.rs]
-features = ["cli"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
@@ -56,7 +56,7 @@ path = "examples/pacc_client.rs"
 required-features = ["pacc", "client"]
 
 [build-dependencies]
-pimalaya-cli = { version = "0.0.2", default-features = false, features = ["build"], optional = true }
+pimalaya-cli = { version = "0.1", default-features = false, features = ["build"], optional = true }
 
 [dev-dependencies]
 env_logger = "0.11"
@@ -66,10 +66,10 @@ anyhow = { version = "1", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 clap = { version = "4.4", features = ["derive", "wrap_help"], optional = true }
 domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
-io-http = { version = "0.2", default-features = false, optional = true }
+io-http = { version = "0.3", default-features = false, optional = true }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.0.2", default-features = false, optional = true }
-pimalaya-stream = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
+pimalaya-cli = { version = "0.1", default-features = false, optional = true }
+pimalaya-stream = { version = "0.1", default-features = false, features = ["std"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde-xml-rs = { version = "0.8", optional = true }
 serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

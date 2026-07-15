@@ -1,6 +1,6 @@
 //! # Combined RFC 8620 resolve coroutine
 //!
-//! [`ResolveJmap`] turns a bare domain into a JMAP Session resource
+//! [`DiscoveryJmapResolve`] turns a bare domain into a JMAP Session resource
 //! URL by chaining the two RFC 8620 §2.2 mechanisms:
 //!
 //! 1. An SRV lookup on `_jmap._tcp.<domain>`, picking the best record
@@ -12,14 +12,14 @@
 //! `https://<domain>:443/` and probes `.well-known/jmap` there. An
 //! origin answering neither a redirect nor 2xx/401 on the probe means
 //! no JMAP service: the resolve completes with
-//! [`ResolveJmapError::NotFound`].
+//! [`DiscoveryJmapResolveError::NotFound`].
 //!
 //! Composing the DNS step (over the `tcp://` resolver) and the HTTPS
 //! well-known step in one coroutine works because every yield carries
 //! its endpoint URL: the std client routes each step through the
-//! matching stream in its [`StreamPool`].
+//! matching stream in its [`DiscoveryStreamPool`].
 //!
-//! [`StreamPool`]: crate::shared::pool::StreamPool
+//! [`DiscoveryStreamPool`]: crate::shared::pool::DiscoveryStreamPool
 
 use core::mem;
 
@@ -35,14 +35,16 @@ use url::Url;
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6186::srv::DiscoveryDnsSrv,
-    rfc8620::well_known::{JmapSessionResource, WellKnownJmap, WellKnownJmapError},
+    rfc8620::well_known::{
+        DiscoveryJmapWellKnown, DiscoveryJmapWellKnownError, JmapSessionResource,
+    },
 };
 
-/// Errors emitted by [`ResolveJmap`].
+/// Errors emitted by [`DiscoveryJmapResolve`].
 #[derive(Debug, Error)]
-pub enum ResolveJmapError {
+pub enum DiscoveryJmapResolveError {
     #[error(transparent)]
-    WellKnown(#[from] WellKnownJmapError),
+    DiscoveryWellKnown(#[from] DiscoveryJmapWellKnownError),
     #[error("RFC 8620 resolve built an invalid origin URL `{0}`: {1}")]
     InvalidOrigin(String, #[source] url::ParseError),
     #[error("RFC 8620 resolve found no JMAP session on `{0}`")]
@@ -50,12 +52,12 @@ pub enum ResolveJmapError {
 }
 
 /// I/O-free `domain -> JMAP session resource` resolver.
-pub struct ResolveJmap {
+pub struct DiscoveryJmapResolve {
     domain: String,
     state: State,
 }
 
-impl ResolveJmap {
+impl DiscoveryJmapResolve {
     /// Builds a resolver for `domain`. `resolver` is the
     /// `tcp://host:port` DNS-over-TCP resolver URL used for the SRV
     /// lookup.
@@ -69,34 +71,36 @@ impl ResolveJmap {
         }
     }
 
-    fn origin(&self, srv: Option<(String, u16)>) -> Result<Url, ResolveJmapError> {
+    fn origin(&self, srv: Option<(String, u16)>) -> Result<Url, DiscoveryJmapResolveError> {
         let (host, port) = srv.unwrap_or_else(|| (self.domain.clone(), 443));
 
         // RFC 8620 §2.2: the session resource is always HTTPS,
         // whatever the SRV record's port.
         let raw = format!("https://{host}:{port}/");
-        Url::parse(&raw).map_err(|err| ResolveJmapError::InvalidOrigin(raw, err))
+        Url::parse(&raw).map_err(|err| DiscoveryJmapResolveError::InvalidOrigin(raw, err))
     }
 
     fn probe(
         &mut self,
         srv: Option<(String, u16)>,
-    ) -> DiscoveryCoroutineState<DiscoveryYield, Result<JmapSessionResource, ResolveJmapError>>
-    {
+    ) -> DiscoveryCoroutineState<
+        DiscoveryYield,
+        Result<JmapSessionResource, DiscoveryJmapResolveError>,
+    > {
         let origin = match self.origin(srv) {
             Ok(origin) => origin,
             Err(err) => return DiscoveryCoroutineState::Complete(Err(err)),
         };
 
-        let probe = WellKnownJmap::new(origin.clone());
-        self.state = State::WellKnown { probe, origin };
+        let probe = DiscoveryJmapWellKnown::new(origin.clone());
+        self.state = State::DiscoveryWellKnown { probe, origin };
         self.resume(None)
     }
 }
 
-impl DiscoveryCoroutine for ResolveJmap {
+impl DiscoveryCoroutine for DiscoveryJmapResolve {
     type Yield = DiscoveryYield;
-    type Return = Result<JmapSessionResource, ResolveJmapError>;
+    type Return = Result<JmapSessionResource, DiscoveryJmapResolveError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
@@ -126,22 +130,22 @@ impl DiscoveryCoroutine for ResolveJmap {
                     self.probe(None)
                 }
             },
-            State::WellKnown { mut probe, origin } => match probe.resume(arg) {
+            State::DiscoveryWellKnown { mut probe, origin } => match probe.resume(arg) {
                 DiscoveryCoroutineState::Complete(Ok(Some(session))) => {
                     DiscoveryCoroutineState::Complete(Ok(session))
                 }
-                DiscoveryCoroutineState::Complete(Ok(None)) => {
-                    DiscoveryCoroutineState::Complete(Err(ResolveJmapError::NotFound(origin)))
-                }
+                DiscoveryCoroutineState::Complete(Ok(None)) => DiscoveryCoroutineState::Complete(
+                    Err(DiscoveryJmapResolveError::NotFound(origin)),
+                ),
                 DiscoveryCoroutineState::Yielded(y) => {
-                    self.state = State::WellKnown { probe, origin };
+                    self.state = State::DiscoveryWellKnown { probe, origin };
                     DiscoveryCoroutineState::Yielded(y)
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {
                     DiscoveryCoroutineState::Complete(Err(err.into()))
                 }
             },
-            State::Done => panic!("ResolveJmap::resume called after completion"),
+            State::Done => panic!("DiscoveryJmapResolve::resume called after completion"),
         }
     }
 }
@@ -149,8 +153,8 @@ impl DiscoveryCoroutine for ResolveJmap {
 #[derive(Default)]
 enum State {
     Srv(DiscoveryDnsSrv),
-    WellKnown {
-        probe: WellKnownJmap,
+    DiscoveryWellKnown {
+        probe: DiscoveryJmapWellKnown,
         origin: Url,
     },
     #[default]

@@ -1,7 +1,7 @@
 //! # DNS SRV query coroutine
 //!
 //! [`DiscoveryDnsSrv`] sends one DNS SRV question through the shared
-//! [`DnsExchange`] transport (DNS-over-TCP or RFC 8484
+//! [`DiscoveryDnsExchange`] transport (DNS-over-TCP or RFC 8484
 //! DNS-over-HTTPS, picked from the resolver URL scheme) and parses
 //! the response into [`Srv`] records sorted per RFC 2782 (ascending
 //! priority, then descending weight). Records whose target is the root
@@ -37,7 +37,7 @@ use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::dns::{DNS_QUERY_BUF_SIZE, DnsExchange, DnsExchangeError},
+    shared::dns::{DNS_QUERY_BUF_SIZE, DiscoveryDnsExchange, DiscoveryDnsExchangeError},
 };
 
 /// Owned DNS SRV answer record returned by [`DiscoveryDnsSrv`].
@@ -55,7 +55,7 @@ pub enum DiscoveryDnsSrvError {
     #[error("DNS SRV stream reached EOF before a full response")]
     Eof,
     #[error("DNS SRV exchange failed")]
-    Exchange(#[source] DnsExchangeError),
+    Exchange(#[source] DiscoveryDnsExchangeError),
 }
 
 /// Internal state of the [`DiscoveryDnsSrv`] coroutine.
@@ -64,7 +64,7 @@ enum State {
     /// First step: the coroutine still has to build the query message.
     BuildQuery,
     /// The query is travelling to the resolver and back.
-    Exchange(DnsExchange),
+    Exchange(DiscoveryDnsExchange),
     /// `Complete` has already been returned.
     #[default]
     Done,
@@ -134,7 +134,7 @@ impl DiscoveryCoroutine for DiscoveryDnsSrv {
                 }
 
                 let message = builder.finish().as_bytes().to_vec();
-                let exchange = DnsExchange::new(message, self.resolver.clone());
+                let exchange = DiscoveryDnsExchange::new(message, self.resolver.clone());
 
                 self.state = State::Exchange(exchange);
                 self.resume(None)
@@ -145,7 +145,7 @@ impl DiscoveryCoroutine for DiscoveryDnsSrv {
                     self.state = State::Exchange(exchange);
                     DiscoveryCoroutineState::Yielded(y)
                 }
-                DiscoveryCoroutineState::Complete(Err(DnsExchangeError::Eof)) => {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryDnsExchangeError::Eof)) => {
                     DiscoveryCoroutineState::Complete(Err(DiscoveryDnsSrvError::Eof))
                 }
                 DiscoveryCoroutineState::Complete(Err(err)) => {

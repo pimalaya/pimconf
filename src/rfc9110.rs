@@ -1,6 +1,6 @@
 //! # HTTP authentication scheme probe (RFC 9110 §11.6.1)
 //!
-//! [`ProbeAuth`] GETs a URL unauthenticated, follows any redirect
+//! [`DiscoveryProbeAuth`] GETs a URL unauthenticated, follows any redirect
 //! chain, and reports the lowercased authentication schemes the
 //! terminal response advertised through `WWW-Authenticate` (a 401 per
 //! RFC 9110 §11.6.1; empty when the response carried none). This is
@@ -25,9 +25,9 @@ use crate::coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYie
 /// Redirect hops followed before giving up on a looping chain.
 const MAX_HOPS: u8 = 5;
 
-/// Errors emitted by [`ProbeAuth`].
+/// Errors emitted by [`DiscoveryProbeAuth`].
 #[derive(Debug, Error)]
-pub enum ProbeAuthError {
+pub enum DiscoveryProbeAuthError {
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }
@@ -38,13 +38,13 @@ pub enum ProbeAuthError {
 /// origins. Completes with the schemes the terminal response
 /// advertised (empty when it advertised none, or the redirect chain
 /// looped).
-pub struct ProbeAuth {
+pub struct DiscoveryProbeAuth {
     target: Url,
     hops: u8,
     probe: Http11WellKnown,
 }
 
-impl ProbeAuth {
+impl DiscoveryProbeAuth {
     /// Builds a probe against `target`, any HTTP URL.
     pub fn new(target: Url) -> Self {
         Self::request(target, 0)
@@ -62,9 +62,9 @@ impl ProbeAuth {
     }
 }
 
-impl DiscoveryCoroutine for ProbeAuth {
+impl DiscoveryCoroutine for DiscoveryProbeAuth {
     type Yield = DiscoveryYield;
-    type Return = Result<Vec<String>, ProbeAuthError>;
+    type Return = Result<Vec<String>, DiscoveryProbeAuthError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.probe.resume(arg) {

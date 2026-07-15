@@ -12,10 +12,10 @@ use pimalaya_stream::tls::Tls;
 use crate::{
     cli::common::{CALENDAR, CONTACT, ConfigsOutput, EMAIL, FILE, ServerArg, only},
     compose::{
-        client::ComposeClientStd,
-        types::{Service, ServiceConfig},
+        client::DiscoveryComposeClientStd,
+        types::{DiscoveryService, DiscoveryServiceConfig},
     },
-    rfc6764::types::DavService,
+    rfc6764::types::DiscoveryDavService,
 };
 
 /// Discover email services (IMAP, POP3, SMTP, JMAP, ManageSieve).
@@ -147,11 +147,14 @@ impl CalendarCommand {
         let configs = match self {
             Self::First(args) => {
                 let client = args.server.client(tls)?;
-                first_dav(&client, &args.domain, DavService::Caldav, CALENDAR)
+                first_dav(&client, &args.domain, DiscoveryDavService::Caldav, CALENDAR)
             }
             Self::Dav(args) => {
                 let client = args.server.client(tls)?;
-                only(client.dav(&args.domain, DavService::Caldav), CALENDAR)
+                only(
+                    client.dav(&args.domain, DiscoveryDavService::Caldav),
+                    CALENDAR,
+                )
             }
             Self::Pacc(args) => {
                 let client = args.server.client(tls)?;
@@ -172,11 +175,14 @@ impl ContactCommand {
         let configs = match self {
             Self::First(args) => {
                 let client = args.server.client(tls)?;
-                first_dav(&client, &args.domain, DavService::Carddav, CONTACT)
+                first_dav(&client, &args.domain, DiscoveryDavService::Carddav, CONTACT)
             }
             Self::Dav(args) => {
                 let client = args.server.client(tls)?;
-                only(client.dav(&args.domain, DavService::Carddav), CONTACT)
+                only(
+                    client.dav(&args.domain, DiscoveryDavService::Carddav),
+                    CONTACT,
+                )
             }
             Self::Pacc(args) => {
                 let client = args.server.client(tls)?;
@@ -195,7 +201,7 @@ impl ContactCommand {
 /// Runs the email mechanisms in priority order and returns the first
 /// non-empty result: provider rules, then autoconfig, PACC, SRV and
 /// finally JMAP. Lazy: nothing runs past the first hit.
-fn first_email(client: &ComposeClientStd, email: &str) -> Vec<ServiceConfig> {
+fn first_email(client: &DiscoveryComposeClientStd, email: &str) -> Vec<DiscoveryServiceConfig> {
     let mut configs = only(client.provider(email), EMAIL);
 
     if configs.is_empty() {
@@ -217,11 +223,11 @@ fn first_email(client: &ComposeClientStd, email: &str) -> Vec<ServiceConfig> {
 /// Runs the DAV-domain mechanisms in priority order and returns the
 /// first non-empty result: the DAV resolve, then PACC, then JMAP.
 fn first_dav(
-    client: &ComposeClientStd,
+    client: &DiscoveryComposeClientStd,
     domain: &str,
-    service: DavService,
-    services: &[Service],
-) -> Vec<ServiceConfig> {
+    service: DiscoveryDavService,
+    services: &[DiscoveryService],
+) -> Vec<DiscoveryServiceConfig> {
     let mut configs = only(client.dav(domain, service), services);
 
     if configs.is_empty() {

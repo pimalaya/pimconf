@@ -1,7 +1,7 @@
 //! # OAuth 2.0 Authorization Server Metadata (RFC 8414)
 //!
-//! [`ResolveOauthServer`] GETs an authorization server's well-known
-//! metadata document and parses it into [`OauthServerMetadata`]
+//! [`DiscoveryOauthServerResolve`] GETs an authorization server's well-known
+//! metadata document and parses it into [`DiscoveryOauthServerMetadata`]
 //! (authorization/token/registration endpoints, supported grants and
 //! scopes). It resolves an issuer surfaced elsewhere (a PACC
 //! `oauth-public` issuer, say) into the concrete endpoints a client
@@ -30,7 +30,7 @@ use crate::coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYie
 ///
 /// Refs: <https://datatracker.ietf.org/doc/html/rfc8414#section-2>
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct OauthServerMetadata {
+pub struct DiscoveryOauthServerMetadata {
     /// The authorization server's issuer identifier.
     pub issuer: Url,
 
@@ -85,7 +85,7 @@ pub struct OauthServerMetadata {
     pub device_authorization_endpoint: Option<Url>,
 }
 
-impl OauthServerMetadata {
+impl DiscoveryOauthServerMetadata {
     /// Builds the metadata's well-known URL for an issuer, inserting
     /// the well-known path between host and issuer path components.
     ///
@@ -109,7 +109,7 @@ impl OauthServerMetadata {
 }
 
 /// Deserializes server metadata from JSON bytes.
-impl TryFrom<&[u8]> for OauthServerMetadata {
+impl TryFrom<&[u8]> for DiscoveryOauthServerMetadata {
     type Error = serde_json::Error;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
@@ -129,9 +129,9 @@ pub(crate) fn insert_well_known(url: &Url, well_known: &str) -> Url {
     transformed
 }
 
-/// Errors emitted by [`ResolveOauthServer`].
+/// Errors emitted by [`DiscoveryOauthServerResolve`].
 #[derive(Debug, Error)]
-pub enum ResolveOauthServerError {
+pub enum DiscoveryOauthServerResolveError {
     #[error(transparent)]
     SendHttpFetch(#[from] Http11SendError),
     #[error(transparent)]
@@ -143,18 +143,18 @@ pub enum ResolveOauthServerError {
 }
 
 /// I/O-free coroutine that GETs an authorization server's well-known
-/// metadata URL (built with [`OauthServerMetadata::well_known_url`],
-/// falling back to [`OauthServerMetadata::openid_well_known_url`] on a
+/// metadata URL (built with [`DiscoveryOauthServerMetadata::well_known_url`],
+/// falling back to [`DiscoveryOauthServerMetadata::openid_well_known_url`] on a
 /// rebuilt coroutine when the server only publishes the OpenID Connect
 /// Discovery document) and parses the JSON metadata. Yields its target
 /// URL on every step so the std client routes bytes through the
 /// matching HTTPS stream.
-pub struct ResolveOauthServer {
+pub struct DiscoveryOauthServerResolve {
     target: Url,
     send: Http11Send,
 }
 
-impl ResolveOauthServer {
+impl DiscoveryOauthServerResolve {
     /// Builds a coroutine fetching the metadata document at `url`.
     pub fn new(url: Url) -> Self {
         let request = HttpRequest::get(url.clone()).header("Accept", "application/json");
@@ -166,22 +166,22 @@ impl ResolveOauthServer {
     }
 }
 
-impl DiscoveryCoroutine for ResolveOauthServer {
+impl DiscoveryCoroutine for DiscoveryOauthServerResolve {
     type Yield = DiscoveryYield;
-    type Return = Result<OauthServerMetadata, ResolveOauthServerError>;
+    type Return = Result<DiscoveryOauthServerMetadata, DiscoveryOauthServerResolveError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.send.resume(arg) {
             HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. }))
                 if response.status.is_success() =>
             {
-                match OauthServerMetadata::try_from(response.body.as_slice()) {
+                match DiscoveryOauthServerMetadata::try_from(response.body.as_slice()) {
                     Ok(metadata) => DiscoveryCoroutineState::Complete(Ok(metadata)),
                     Err(err) => DiscoveryCoroutineState::Complete(Err(err.into())),
                 }
             }
             HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. })) => {
-                DiscoveryCoroutineState::Complete(Err(ResolveOauthServerError::Status {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryOauthServerResolveError::Status {
                     code: *response.status,
                 }))
             }
@@ -197,7 +197,7 @@ impl DiscoveryCoroutine for ResolveOauthServer {
                 })
             }
             HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { url, response, .. }) => {
-                DiscoveryCoroutineState::Complete(Err(ResolveOauthServerError::Redirect {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryOauthServerResolveError::Redirect {
                     url,
                     code: *response.status,
                 }))
@@ -213,17 +213,17 @@ impl DiscoveryCoroutine for ResolveOauthServer {
 mod tests {
     use url::Url;
 
-    use crate::rfc8414::OauthServerMetadata;
+    use crate::rfc8414::DiscoveryOauthServerMetadata;
 
     #[test]
     fn well_known_urls_follow_the_transformation_rules() {
         let bare: Url = "https://example.com".parse().unwrap();
         assert_eq!(
-            OauthServerMetadata::well_known_url(&bare).as_str(),
+            DiscoveryOauthServerMetadata::well_known_url(&bare).as_str(),
             "https://example.com/.well-known/oauth-authorization-server",
         );
         assert_eq!(
-            OauthServerMetadata::openid_well_known_url(&bare).as_str(),
+            DiscoveryOauthServerMetadata::openid_well_known_url(&bare).as_str(),
             "https://example.com/.well-known/openid-configuration",
         );
 
@@ -231,11 +231,11 @@ mod tests {
         // segment; the OpenID compatibility form appends instead.
         let issuer: Url = "https://example.com/issuer1".parse().unwrap();
         assert_eq!(
-            OauthServerMetadata::well_known_url(&issuer).as_str(),
+            DiscoveryOauthServerMetadata::well_known_url(&issuer).as_str(),
             "https://example.com/.well-known/oauth-authorization-server/issuer1",
         );
         assert_eq!(
-            OauthServerMetadata::openid_well_known_url(&issuer).as_str(),
+            DiscoveryOauthServerMetadata::openid_well_known_url(&issuer).as_str(),
             "https://example.com/issuer1/.well-known/openid-configuration",
         );
     }
@@ -249,7 +249,7 @@ mod tests {
             "code_challenge_methods_supported": ["S256"]
         }"#;
 
-        let metadata = OauthServerMetadata::try_from(json.as_slice()).unwrap();
+        let metadata = DiscoveryOauthServerMetadata::try_from(json.as_slice()).unwrap();
         assert_eq!(metadata.issuer.as_str(), "https://api.example.com/");
         assert!(metadata.registration_endpoint.is_some());
         assert_eq!(metadata.token_endpoint_auth_methods_supported, ["none"]);

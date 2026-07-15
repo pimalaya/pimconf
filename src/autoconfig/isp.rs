@@ -1,7 +1,7 @@
 //! # Per-URL ISP autoconfig HTTP+XML fetch
 //!
 //! [`DiscoveryIsp`] is a single-URL fetch coroutine: it drives one
-//! [`HttpGet`] cycle and parses the response body as a Mozilla
+//! [`DiscoveryHttpGet`] cycle and parses the response body as a Mozilla
 //! [Autoconfiguration] XML document. URL selection and stream routing
 //! are the runtime's responsibility: the caller pairs this coroutine
 //! with one of the static URL helpers ([`main_url`], [`fallback_url`],
@@ -27,7 +27,7 @@ use url::{ParseError, Url};
 use crate::{
     autoconfig::types::Autoconfig,
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::http::{HttpGet, HttpGetError},
+    shared::http::{DiscoveryHttpGet, DiscoveryHttpGetError},
 };
 
 /// Errors that can occur during a single ISP autoconfig HTTP exchange.
@@ -38,12 +38,12 @@ pub enum DiscoveryIspError {
     #[error("ISP call returned invalid XML body")]
     Xml(#[source] serde_xml_rs::Error),
     #[error(transparent)]
-    Http(#[from] HttpGetError),
+    Http(#[from] DiscoveryHttpGetError),
 }
 
 /// HTTP+XML fetch coroutine for a single ISP autoconfig URL.
 pub struct DiscoveryIsp {
-    get: HttpGet,
+    get: DiscoveryHttpGet,
 }
 
 impl DiscoveryIsp {
@@ -103,7 +103,7 @@ impl DiscoveryIsp {
     /// stream open on that URL for the lifetime of the coroutine.
     pub fn new(url: Url) -> Self {
         Self {
-            get: HttpGet::new(url),
+            get: DiscoveryHttpGet::new(url),
         }
     }
 }

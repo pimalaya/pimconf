@@ -1,9 +1,9 @@
 //! # Standard, blocking compose client
 //!
-//! [`ComposeClientStd`] orchestrates the discovery bricks in parallel:
+//! [`DiscoveryComposeClientStd`] orchestrates the discovery bricks in parallel:
 //! one OS thread per mechanism, each pumping its coroutine through
-//! its own [`StreamPool`], the outputs reduced in mechanism-priority
-//! order by the pure [`ConfigCollector`]. A final probe pass then
+//! its own [`DiscoveryStreamPool`], the outputs reduced in mechanism-priority
+//! order by the pure [`DiscoveryConfigCollector`]. A final probe pass then
 //! asks each collected HTTP endpoint which authentication schemes it
 //! advertises on its unauthenticated 401 (PACC §5.4.2) and refines
 //! the config's password and bearer methods accordingly, one thread
@@ -30,51 +30,51 @@ use url::Url;
 
 #[cfg(feature = "autoconfig")]
 use crate::autoconfig::{isp::DiscoveryIsp, mailconf::DiscoveryMailconf, mx::DiscoveryDnsMx};
-#[cfg(feature = "rfc8414")]
-use crate::compose::types::AuthMethod;
 #[cfg(feature = "autoconfig")]
 use crate::compose::types::ConfigSource;
+#[cfg(feature = "rfc8414")]
+use crate::compose::types::DiscoveryAuthMethod;
 #[cfg(feature = "pacc")]
 use crate::pacc::discover::DiscoveryPacc;
 #[cfg(feature = "rfc6186")]
 use crate::rfc6186::discover::DiscoverySrv;
 #[cfg(feature = "rfc6764")]
-use crate::rfc6764::{resolve::ResolveDav, types::DavService};
+use crate::rfc6764::{resolve::DiscoveryDavResolve, types::DiscoveryDavService};
 #[cfg(feature = "rfc8414")]
-use crate::rfc8414::{OauthServerMetadata, ResolveOauthServer};
+use crate::rfc8414::{DiscoveryOauthServerMetadata, DiscoveryOauthServerResolve};
 #[cfg(feature = "rfc8620")]
-use crate::rfc8620::resolve::ResolveJmap;
+use crate::rfc8620::resolve::DiscoveryJmapResolve;
 #[cfg(feature = "rfc8620")]
-use crate::rfc9110::ProbeAuth;
+use crate::rfc9110::DiscoveryProbeAuth;
 #[cfg(feature = "rfc9728")]
-use crate::rfc9728::{OauthResourceMetadata, ResolveOauthResource};
+use crate::rfc9728::{DiscoveryOauthResourceMetadata, DiscoveryOauthResourceResolve};
 use crate::{
     compose::{
-        collect::ConfigCollector,
+        collect::DiscoveryConfigCollector,
         providers::Provider,
-        types::{Service, ServiceConfig},
+        types::{DiscoveryService, DiscoveryServiceConfig},
     },
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::pool::StreamPool,
+    shared::pool::DiscoveryStreamPool,
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
 
-/// Errors returned by [`ComposeClientStd`].
+/// Errors returned by [`DiscoveryComposeClientStd`].
 #[derive(Debug, Error)]
-pub enum ComposeClientStdError {
+pub enum DiscoveryComposeClientStdError {
     /// The input is not a valid `local@domain` email address.
     #[error("Email address `{0}` is missing the `@` separator")]
     InvalidEmail(String),
 }
 
 /// Std-blocking parallel compose orchestrator.
-pub struct ComposeClientStd {
+pub struct DiscoveryComposeClientStd {
     dns: Url,
     tls: Tls,
 }
 
-impl ComposeClientStd {
+impl DiscoveryComposeClientStd {
     /// Builds a client that resolves DNS lookups through `dns` (a
     /// `tcp://host:port` URL pointing at a DNS-over-TCP resolver) and
     /// runs the HTTPS-bound mechanisms over `tls`.
@@ -88,8 +88,8 @@ impl ComposeClientStd {
     pub fn compose_all(
         &self,
         email: &str,
-        services: BTreeSet<Service>,
-    ) -> Result<Vec<ServiceConfig>, ComposeClientStdError> {
+        services: BTreeSet<DiscoveryService>,
+    ) -> Result<Vec<DiscoveryServiceConfig>, DiscoveryComposeClientStdError> {
         self.compose(email, services, false)
     }
 
@@ -101,8 +101,8 @@ impl ComposeClientStd {
     pub fn compose_first(
         &self,
         email: &str,
-        services: BTreeSet<Service>,
-    ) -> Result<Vec<ServiceConfig>, ComposeClientStdError> {
+        services: BTreeSet<DiscoveryService>,
+    ) -> Result<Vec<DiscoveryServiceConfig>, DiscoveryComposeClientStdError> {
         self.compose(email, services, true)
     }
 
@@ -115,11 +115,11 @@ impl ComposeClientStd {
     pub fn compose_raw(
         &self,
         email: &str,
-        services: BTreeSet<Service>,
-    ) -> Result<Vec<ServiceConfig>, ComposeClientStdError> {
+        services: BTreeSet<DiscoveryService>,
+    ) -> Result<Vec<DiscoveryServiceConfig>, DiscoveryComposeClientStdError> {
         let outputs = self.parallel_outputs(email, &services)?;
 
-        let mut configs: Vec<ServiceConfig> = outputs
+        let mut configs: Vec<DiscoveryServiceConfig> = outputs
             .into_iter()
             .flatten()
             .filter(|config| services.is_empty() || services.contains(&config.service))
@@ -132,7 +132,7 @@ impl ComposeClientStd {
 
     /// Discovers the fixed-provider configs for `email`: the domain
     /// rule first, then MX-based detection. Raw and unmerged.
-    pub fn provider(&self, email: &str) -> Vec<ServiceConfig> {
+    pub fn provider(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         self.detect_provider(email)
             .map(|provider| provider.configs(email))
             .unwrap_or_default()
@@ -140,7 +140,7 @@ impl ComposeClientStd {
 
     /// The fixed Google configs for `email` when it is Google-hosted
     /// (domain rule or MX records), otherwise empty.
-    pub fn is_google(&self, email: &str) -> Vec<ServiceConfig> {
+    pub fn is_google(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         match self.detect_provider(email) {
             Some(Provider::Google) => Provider::Google.configs(email),
             _ => Vec::new(),
@@ -149,7 +149,7 @@ impl ComposeClientStd {
 
     /// The fixed Microsoft configs for `email` when it is
     /// Microsoft-hosted (domain rule or MX records), otherwise empty.
-    pub fn is_microsoft(&self, email: &str) -> Vec<ServiceConfig> {
+    pub fn is_microsoft(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         match self.detect_provider(email) {
             Some(Provider::Microsoft) => Provider::Microsoft.configs(email),
             _ => Vec::new(),
@@ -159,7 +159,7 @@ impl ComposeClientStd {
     /// Runs every Mozilla autoconfig location (ISP main, ISP fallback,
     /// ISPDB, mailconf) for `email`. Raw and unmerged.
     #[cfg(feature = "autoconfig")]
-    pub fn autoconfig(&self, email: &str) -> Vec<ServiceConfig> {
+    pub fn autoconfig(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         let local = email.split_once('@').map(|(local, _)| local).unwrap_or("");
         let domain = domain_part(email);
 
@@ -174,28 +174,28 @@ impl ComposeClientStd {
     /// Runs RFC 6186 SRV mail discovery for `input` (an email address
     /// or a bare domain). Raw.
     #[cfg(feature = "rfc6186")]
-    pub fn srv(&self, input: &str) -> Vec<ServiceConfig> {
+    pub fn srv(&self, input: &str) -> Vec<DiscoveryServiceConfig> {
         self.run_srv(&domain_part(input))
     }
 
     /// Runs PACC discovery for `input` (an email address or a bare
     /// domain). Raw.
     #[cfg(feature = "pacc")]
-    pub fn pacc(&self, input: &str) -> Vec<ServiceConfig> {
+    pub fn pacc(&self, input: &str) -> Vec<DiscoveryServiceConfig> {
         self.run_pacc(&domain_part(input))
     }
 
     /// Runs RFC 6764 CalDAV or CardDAV resolution for `input` (an
     /// email address or a bare domain). Raw.
     #[cfg(feature = "rfc6764")]
-    pub fn dav(&self, input: &str, service: DavService) -> Vec<ServiceConfig> {
+    pub fn dav(&self, input: &str, service: DiscoveryDavService) -> Vec<DiscoveryServiceConfig> {
         self.run_dav(&domain_part(input), service)
     }
 
     /// Runs RFC 8620 JMAP session resolution for `input` (an email
     /// address or a bare domain). Raw.
     #[cfg(feature = "rfc8620")]
-    pub fn jmap(&self, input: &str) -> Vec<ServiceConfig> {
+    pub fn jmap(&self, input: &str) -> Vec<DiscoveryServiceConfig> {
         self.run_jmap(&domain_part(input))
     }
 
@@ -204,7 +204,7 @@ impl ComposeClientStd {
     /// nothing was advertised.
     #[cfg(feature = "rfc8620")]
     pub fn auth(&self, url: Url) -> Option<Vec<String>> {
-        match run(&mut self.pool(), ProbeAuth::new(url)) {
+        match run(&mut self.pool(), DiscoveryProbeAuth::new(url)) {
             Ok(schemes) if !schemes.is_empty() => Some(schemes),
             _ => None,
         }
@@ -214,35 +214,42 @@ impl ComposeClientStd {
     /// trying the OAuth well-known URL then the OpenID Connect
     /// Discovery one. `None` when neither resolves.
     #[cfg(feature = "rfc8414")]
-    pub fn oauth_server(&self, issuer: &Url) -> Option<OauthServerMetadata> {
-        let well_known = OauthServerMetadata::well_known_url(issuer);
-        if let Ok(metadata) = run(&mut self.pool(), ResolveOauthServer::new(well_known)) {
+    pub fn oauth_server(&self, issuer: &Url) -> Option<DiscoveryOauthServerMetadata> {
+        let well_known = DiscoveryOauthServerMetadata::well_known_url(issuer);
+        if let Ok(metadata) = run(
+            &mut self.pool(),
+            DiscoveryOauthServerResolve::new(well_known),
+        ) {
             return Some(metadata);
         }
 
-        let openid = OauthServerMetadata::openid_well_known_url(issuer);
-        run(&mut self.pool(), ResolveOauthServer::new(openid)).ok()
+        let openid = DiscoveryOauthServerMetadata::openid_well_known_url(issuer);
+        run(&mut self.pool(), DiscoveryOauthServerResolve::new(openid)).ok()
     }
 
     /// Fetches `resource`'s RFC 9728 protected resource metadata from
     /// its well-known URL. `None` when it does not resolve.
     #[cfg(feature = "rfc9728")]
-    pub fn oauth_resource(&self, resource: &Url) -> Option<OauthResourceMetadata> {
-        let well_known = OauthResourceMetadata::well_known_url(resource);
-        run(&mut self.pool(), ResolveOauthResource::new(well_known)).ok()
+    pub fn oauth_resource(&self, resource: &Url) -> Option<DiscoveryOauthResourceMetadata> {
+        let well_known = DiscoveryOauthResourceMetadata::well_known_url(resource);
+        run(
+            &mut self.pool(),
+            DiscoveryOauthResourceResolve::new(well_known),
+        )
+        .ok()
     }
 
     fn compose(
         &self,
         email: &str,
-        services: BTreeSet<Service>,
+        services: BTreeSet<DiscoveryService>,
         first: bool,
-    ) -> Result<Vec<ServiceConfig>, ComposeClientStdError> {
+    ) -> Result<Vec<DiscoveryServiceConfig>, DiscoveryComposeClientStdError> {
         debug!("begin config compose");
         trace!("email {email}, first: {first}, services: {services:?}");
 
         let outputs = self.parallel_outputs(email, &services)?;
-        let mut collector = ConfigCollector::new(services);
+        let mut collector = DiscoveryConfigCollector::new(services);
 
         for configs in outputs {
             collector.collect(configs);
@@ -268,22 +275,26 @@ impl ComposeClientStd {
     fn parallel_outputs(
         &self,
         email: &str,
-        services: &BTreeSet<Service>,
-    ) -> Result<Vec<Vec<ServiceConfig>>, ComposeClientStdError> {
+        services: &BTreeSet<DiscoveryService>,
+    ) -> Result<Vec<Vec<DiscoveryServiceConfig>>, DiscoveryComposeClientStdError> {
         let email = email.trim();
 
         let Some((local, domain)) = email.split_once('@') else {
-            return Err(ComposeClientStdError::InvalidEmail(email.to_string()));
+            return Err(DiscoveryComposeClientStdError::InvalidEmail(
+                email.to_string(),
+            ));
         };
         let domain = domain.trim_matches('.').to_ascii_lowercase();
 
-        let wants = |service: Service| services.is_empty() || services.contains(&service);
-        let wants_mail = wants(Service::Imap) || wants(Service::Pop3) || wants(Service::Smtp);
+        let wants = |service: DiscoveryService| services.is_empty() || services.contains(&service);
+        let wants_mail = wants(DiscoveryService::Imap)
+            || wants(DiscoveryService::Pop3)
+            || wants(DiscoveryService::Smtp);
 
         // Mechanism outputs, in priority order. The fixed provider
         // domain rule is pure and comes first; when it matches, the
         // MX-based provider detection is pointless and skipped.
-        let mut outputs: Vec<Vec<ServiceConfig>> = Vec::new();
+        let mut outputs: Vec<Vec<DiscoveryServiceConfig>> = Vec::new();
 
         let provider = Provider::from_domain(&domain);
         if let Some(provider) = provider {
@@ -309,21 +320,21 @@ impl ComposeClientStd {
                 handles.push(scope.spawn(|| self.run_ispdb(domain, email)));
             }
 
-            if wants(Service::Imap) || wants(Service::Smtp) {
+            if wants(DiscoveryService::Imap) || wants(DiscoveryService::Smtp) {
                 handles.push(scope.spawn(|| self.run_srv(domain)));
             }
 
             #[cfg(feature = "rfc6764")]
-            if wants(Service::Caldav) {
-                handles.push(scope.spawn(|| self.run_dav(domain, DavService::Caldav)));
+            if wants(DiscoveryService::Caldav) {
+                handles.push(scope.spawn(|| self.run_dav(domain, DiscoveryDavService::Caldav)));
             }
 
             #[cfg(feature = "rfc6764")]
-            if wants(Service::Carddav) {
-                handles.push(scope.spawn(|| self.run_dav(domain, DavService::Carddav)));
+            if wants(DiscoveryService::Carddav) {
+                handles.push(scope.spawn(|| self.run_dav(domain, DiscoveryDavService::Carddav)));
             }
 
-            if wants(Service::Jmap) {
+            if wants(DiscoveryService::Jmap) {
                 handles.push(scope.spawn(|| self.run_jmap(domain)));
             }
 
@@ -342,12 +353,12 @@ impl ComposeClientStd {
     /// resolved once, in parallel; unresolvable issuers are left as
     /// they were.
     #[cfg(feature = "rfc8414")]
-    fn resolve_issuers(&self, configs: &mut [ServiceConfig]) {
+    fn resolve_issuers(&self, configs: &mut [DiscoveryServiceConfig]) {
         let issuers: BTreeSet<String> = configs
             .iter()
             .flat_map(|config| &config.auth)
             .filter_map(|method| match method {
-                AuthMethod::OauthIssuer(issuer) => Some(issuer.clone()),
+                DiscoveryAuthMethod::OauthIssuer(issuer) => Some(issuer.clone()),
                 _ => None,
             })
             .collect();
@@ -356,7 +367,7 @@ impl ComposeClientStd {
             return;
         }
 
-        let resolved: BTreeMap<String, Vec<AuthMethod>> = thread::scope(|scope| {
+        let resolved: BTreeMap<String, Vec<DiscoveryAuthMethod>> = thread::scope(|scope| {
             let handles: Vec<_> = issuers
                 .iter()
                 .map(|issuer| scope.spawn(move || (issuer.clone(), self.resolve_issuer(issuer))))
@@ -373,9 +384,9 @@ impl ComposeClientStd {
 
             for method in config.auth.drain(..) {
                 match method {
-                    AuthMethod::OauthIssuer(issuer) => match resolved.get(&issuer) {
+                    DiscoveryAuthMethod::OauthIssuer(issuer) => match resolved.get(&issuer) {
                         Some(methods) => auth.extend(methods.iter().cloned()),
-                        None => auth.push(AuthMethod::OauthIssuer(issuer)),
+                        None => auth.push(DiscoveryAuthMethod::OauthIssuer(issuer)),
                     },
                     other => auth.push(other),
                 }
@@ -388,7 +399,7 @@ impl ComposeClientStd {
     /// No-op when RFC 8414 is not compiled in: discovered issuers stay
     /// as bare `OauthIssuer` methods.
     #[cfg(not(feature = "rfc8414"))]
-    fn resolve_issuers(&self, _configs: &mut [ServiceConfig]) {}
+    fn resolve_issuers(&self, _configs: &mut [DiscoveryServiceConfig]) {}
 
     /// Resolves one issuer to the grants its RFC 8414 metadata
     /// advertises (authorization code grant, plus device grant when
@@ -396,8 +407,8 @@ impl ComposeClientStd {
     /// to the bare issuer when the metadata cannot be fetched or names
     /// no usable endpoints.
     #[cfg(feature = "rfc8414")]
-    fn resolve_issuer(&self, issuer: &str) -> Vec<AuthMethod> {
-        let bare = || vec![AuthMethod::OauthIssuer(issuer.to_string())];
+    fn resolve_issuer(&self, issuer: &str) -> Vec<DiscoveryAuthMethod> {
+        let bare = || vec![DiscoveryAuthMethod::OauthIssuer(issuer.to_string())];
 
         let Ok(issuer_url) = Url::parse(issuer) else {
             return bare();
@@ -413,7 +424,7 @@ impl ComposeClientStd {
         if let (Some(authorization), Some(token)) =
             (&metadata.authorization_endpoint, &metadata.token_endpoint)
         {
-            methods.push(AuthMethod::OauthAuthorizationCodeGrant {
+            methods.push(DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
                 authorization_endpoint: authorization.to_string(),
                 token_endpoint: token.to_string(),
                 scope: None,
@@ -424,7 +435,7 @@ impl ComposeClientStd {
             &metadata.device_authorization_endpoint,
             &metadata.token_endpoint,
         ) {
-            methods.push(AuthMethod::OauthDeviceAuthorizationGrant {
+            methods.push(DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                 device_authorization_endpoint: device.to_string(),
                 token_endpoint: token.to_string(),
                 scope: None,
@@ -437,8 +448,8 @@ impl ComposeClientStd {
     /// A fresh stream pool for one mechanism thread: the default
     /// `tcp` factory for DNS lookups, plus `http`/`https` factories
     /// backed by the client's TLS.
-    fn pool(&self) -> StreamPool {
-        StreamPool::new().with_http_factories(self.tls.clone())
+    fn pool(&self) -> DiscoveryStreamPool {
+        DiscoveryStreamPool::new().with_http_factories(self.tls.clone())
     }
 
     /// Probes each config's endpoints for their advertised
@@ -446,7 +457,7 @@ impl ComposeClientStd {
     /// in place. Within one config, the URLs are tried in order until
     /// one advertises any scheme.
     #[cfg(feature = "rfc8620")]
-    fn probe(&self, configs: &mut [ServiceConfig]) {
+    fn probe(&self, configs: &mut [DiscoveryServiceConfig]) {
         let schemes: Vec<Option<Vec<String>>> = thread::scope(|scope| {
             let handles: Vec<_> = configs
                 .iter()
@@ -457,7 +468,7 @@ impl ComposeClientStd {
                             debug!("probe endpoint authentication schemes");
                             trace!("{url}");
 
-                            match run(&mut self.pool(), ProbeAuth::new(url)) {
+                            match run(&mut self.pool(), DiscoveryProbeAuth::new(url)) {
                                 Ok(schemes) if !schemes.is_empty() => return Some(schemes),
                                 // Nothing learned at this URL: the
                                 // config's next URL gets its turn.
@@ -490,7 +501,7 @@ impl ComposeClientStd {
     /// compiled in: configs keep the auth methods their mechanism
     /// reported.
     #[cfg(not(feature = "rfc8620"))]
-    fn probe(&self, _configs: &mut [ServiceConfig]) {}
+    fn probe(&self, _configs: &mut [DiscoveryServiceConfig]) {}
 
     /// Detects the fixed provider hosting `email`: the domain rule
     /// first, then MX-based detection. `None` when neither matches.
@@ -530,7 +541,7 @@ impl ComposeClientStd {
     /// The fixed configs of the provider hosting `domain` per its MX
     /// records, or empty.
     #[cfg(feature = "autoconfig")]
-    fn run_mx(&self, domain: &str, email: &str) -> Vec<ServiceConfig> {
+    fn run_mx(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         self.provider_from_mx(domain)
             .map(|provider| provider.configs(email))
             .unwrap_or_default()
@@ -544,12 +555,12 @@ impl ComposeClientStd {
     }
 
     #[cfg(not(feature = "autoconfig"))]
-    fn run_mx(&self, _domain: &str, _email: &str) -> Vec<ServiceConfig> {
+    fn run_mx(&self, _domain: &str, _email: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(feature = "pacc")]
-    fn run_pacc(&self, domain: &str) -> Vec<ServiceConfig> {
+    fn run_pacc(&self, domain: &str) -> Vec<DiscoveryServiceConfig> {
         let pacc = match DiscoveryPacc::new(domain, self.dns.clone()) {
             Ok(pacc) => pacc,
             Err(err) => {
@@ -560,7 +571,7 @@ impl ComposeClientStd {
         };
 
         match run(&mut self.pool(), pacc) {
-            Ok(config) => ServiceConfig::from_pacc(&config),
+            Ok(config) => DiscoveryServiceConfig::from_pacc(&config),
             Err(err) => {
                 debug!("skip PACC discovery");
                 trace!("{err:?}");
@@ -570,12 +581,12 @@ impl ComposeClientStd {
     }
 
     #[cfg(not(feature = "pacc"))]
-    fn run_pacc(&self, _domain: &str) -> Vec<ServiceConfig> {
+    fn run_pacc(&self, _domain: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(feature = "autoconfig")]
-    fn run_isp_main(&self, local: &str, domain: &str, email: &str) -> Vec<ServiceConfig> {
+    fn run_isp_main(&self, local: &str, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::main_url(local, domain, true) {
             Ok(url) => self.run_isp(url, email, ConfigSource::IspMain),
             Err(err) => {
@@ -587,7 +598,7 @@ impl ComposeClientStd {
     }
 
     #[cfg(feature = "autoconfig")]
-    fn run_isp_fallback(&self, domain: &str, email: &str) -> Vec<ServiceConfig> {
+    fn run_isp_fallback(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::fallback_url(domain, true) {
             Ok(url) => self.run_isp(url, email, ConfigSource::IspFallback),
             Err(err) => {
@@ -599,7 +610,7 @@ impl ComposeClientStd {
     }
 
     #[cfg(feature = "autoconfig")]
-    fn run_ispdb(&self, domain: &str, email: &str) -> Vec<ServiceConfig> {
+    fn run_ispdb(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::db_url(domain, true) {
             Ok(url) => self.run_isp(url, email, ConfigSource::Ispdb),
             Err(err) => {
@@ -612,7 +623,7 @@ impl ComposeClientStd {
 
     /// Follows the mailconf TXT redirect to its autoconfig document.
     #[cfg(feature = "autoconfig")]
-    fn run_mailconf(&self, domain: &str, email: &str) -> Vec<ServiceConfig> {
+    fn run_mailconf(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         let mailconf = DiscoveryMailconf::new(domain, self.dns.clone());
 
         match run(&mut self.pool(), mailconf) {
@@ -630,9 +641,9 @@ impl ComposeClientStd {
     }
 
     #[cfg(feature = "autoconfig")]
-    fn run_isp(&self, url: Url, email: &str, source: ConfigSource) -> Vec<ServiceConfig> {
+    fn run_isp(&self, url: Url, email: &str, source: ConfigSource) -> Vec<DiscoveryServiceConfig> {
         match run(&mut self.pool(), DiscoveryIsp::new(url)) {
-            Ok(config) => ServiceConfig::from_autoconfig(&config, email, source),
+            Ok(config) => DiscoveryServiceConfig::from_autoconfig(&config, email, source),
             Err(err) => {
                 debug!("skip autoconfig document");
                 trace!("{err:?}");
@@ -644,31 +655,36 @@ impl ComposeClientStd {
     /// No-op autoconfig stubs when `autoconfig` is off, so the
     /// orchestrator calls them without a cfg at each site.
     #[cfg(not(feature = "autoconfig"))]
-    fn run_isp_main(&self, _local: &str, _domain: &str, _email: &str) -> Vec<ServiceConfig> {
+    fn run_isp_main(
+        &self,
+        _local: &str,
+        _domain: &str,
+        _email: &str,
+    ) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(not(feature = "autoconfig"))]
-    fn run_isp_fallback(&self, _domain: &str, _email: &str) -> Vec<ServiceConfig> {
+    fn run_isp_fallback(&self, _domain: &str, _email: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(not(feature = "autoconfig"))]
-    fn run_ispdb(&self, _domain: &str, _email: &str) -> Vec<ServiceConfig> {
+    fn run_ispdb(&self, _domain: &str, _email: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(not(feature = "autoconfig"))]
-    fn run_mailconf(&self, _domain: &str, _email: &str) -> Vec<ServiceConfig> {
+    fn run_mailconf(&self, _domain: &str, _email: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(feature = "rfc6186")]
-    fn run_srv(&self, domain: &str) -> Vec<ServiceConfig> {
+    fn run_srv(&self, domain: &str) -> Vec<DiscoveryServiceConfig> {
         let srv = DiscoverySrv::new(domain, self.dns.clone());
 
         match run(&mut self.pool(), srv) {
-            Ok(report) => ServiceConfig::from_srv(&report),
+            Ok(report) => DiscoveryServiceConfig::from_srv(&report),
             Err(err) => {
                 debug!("skip RFC 6186 SRV discovery");
                 trace!("{err:?}");
@@ -678,21 +694,21 @@ impl ComposeClientStd {
     }
 
     #[cfg(not(feature = "rfc6186"))]
-    fn run_srv(&self, _domain: &str) -> Vec<ServiceConfig> {
+    fn run_srv(&self, _domain: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 
     #[cfg(feature = "rfc6764")]
-    fn run_dav(&self, domain: &str, service: DavService) -> Vec<ServiceConfig> {
-        let resolve = ResolveDav::new(domain, service, self.dns.clone());
+    fn run_dav(&self, domain: &str, service: DiscoveryDavService) -> Vec<DiscoveryServiceConfig> {
+        let resolve = DiscoveryDavResolve::new(domain, service, self.dns.clone());
 
         let config_service = match service {
-            DavService::Caldav => Service::Caldav,
-            DavService::Carddav => Service::Carddav,
+            DiscoveryDavService::Caldav => DiscoveryService::Caldav,
+            DiscoveryDavService::Carddav => DiscoveryService::Carddav,
         };
 
         match run(&mut self.pool(), resolve) {
-            Ok(url) => vec![ServiceConfig::from_dav(config_service, url)],
+            Ok(url) => vec![DiscoveryServiceConfig::from_dav(config_service, url)],
             Err(err) => {
                 debug!("skip RFC 6764 DAV resolve");
                 trace!("{err:?}");
@@ -702,11 +718,14 @@ impl ComposeClientStd {
     }
 
     #[cfg(feature = "rfc8620")]
-    fn run_jmap(&self, domain: &str) -> Vec<ServiceConfig> {
-        let resolve = ResolveJmap::new(domain, self.dns.clone());
+    fn run_jmap(&self, domain: &str) -> Vec<DiscoveryServiceConfig> {
+        let resolve = DiscoveryJmapResolve::new(domain, self.dns.clone());
 
         match run(&mut self.pool(), resolve) {
-            Ok(session) => vec![ServiceConfig::from_jmap(session.url, &session.auth_schemes)],
+            Ok(session) => vec![DiscoveryServiceConfig::from_jmap(
+                session.url,
+                &session.auth_schemes,
+            )],
             Err(err) => {
                 debug!("skip RFC 8620 JMAP resolve");
                 trace!("{err:?}");
@@ -716,7 +735,7 @@ impl ComposeClientStd {
     }
 
     #[cfg(not(feature = "rfc8620"))]
-    fn run_jmap(&self, _domain: &str) -> Vec<ServiceConfig> {
+    fn run_jmap(&self, _domain: &str) -> Vec<DiscoveryServiceConfig> {
         Vec::new()
     }
 }
@@ -742,7 +761,7 @@ fn normalize_domain(domain: &str) -> String {
 /// or written is signalled to the coroutine as EOF (an empty resume
 /// slice), so the mechanism errors out on its own and the caller
 /// skips it.
-fn run<C, T, E>(pool: &mut StreamPool, mut coroutine: C) -> Result<T, E>
+fn run<C, T, E>(pool: &mut DiscoveryStreamPool, mut coroutine: C) -> Result<T, E>
 where
     C: DiscoveryCoroutine<Yield = DiscoveryYield, Return = Result<T, E>>,
 {

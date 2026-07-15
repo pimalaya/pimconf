@@ -2,7 +2,7 @@
 //!
 //! [`DiscoverySrvClientStd`] drives the [`DiscoverySrv`] combined
 //! coroutine (three SRV queries → best-record-per-service assembly)
-//! end-to-end through a local [`StreamPool`]. One method:
+//! end-to-end through a local [`DiscoveryStreamPool`]. One method:
 //! [`discover`].
 //!
 //! Only the default `tcp` factory is needed: SRV discovery never
@@ -24,7 +24,7 @@ use crate::{
         discover::{DiscoverySrv, DiscoverySrvError},
         types::SrvReport,
     },
-    shared::pool::{Stream, StreamPool},
+    shared::pool::{DiscoveryStreamPool, Stream},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -39,7 +39,7 @@ pub enum DiscoverySrvClientStdError {
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// [`StreamPool::get`] failed (unknown scheme, factory error).
+    /// [`DiscoveryStreamPool::get`] failed (unknown scheme, factory error).
     #[error(transparent)]
     Pool(#[from] anyhow::Error),
 }
@@ -47,7 +47,7 @@ pub enum DiscoverySrvClientStdError {
 /// Std-blocking RFC 6186 SRV discovery client.
 pub struct DiscoverySrvClientStd {
     dns: Url,
-    pool: StreamPool,
+    pool: DiscoveryStreamPool,
 }
 
 impl DiscoverySrvClientStd {
@@ -61,7 +61,7 @@ impl DiscoverySrvClientStd {
     pub fn new(dns: Url) -> Self {
         Self {
             dns,
-            pool: StreamPool::new(),
+            pool: DiscoveryStreamPool::new(),
         }
     }
 

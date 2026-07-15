@@ -10,10 +10,10 @@
 //! (typically `http`/`https` via [`with_http_factories`]) through
 //! [`with_factory`].
 //!
-//! [`new`]: StreamPool::new
-//! [`get`]: StreamPool::get
-//! [`with_factory`]: StreamPool::with_factory
-//! [`with_http_factories`]: StreamPool::with_http_factories
+//! [`new`]: DiscoveryStreamPool::new
+//! [`get`]: DiscoveryStreamPool::get
+//! [`with_factory`]: DiscoveryStreamPool::with_factory
+//! [`with_http_factories`]: DiscoveryStreamPool::with_http_factories
 
 use std::{
     boxed::Box,
@@ -64,24 +64,24 @@ impl TryFrom<&Url> for StreamPoolKey {
 }
 
 /// URL-keyed pool of lazily-opened blocking streams.
-pub struct StreamPool {
+pub struct DiscoveryStreamPool {
     streams: HashMap<StreamPoolKey, Box<dyn Stream>>,
     factories: HashMap<&'static str, StreamFactory>,
 }
 
-impl Default for StreamPool {
+impl Default for DiscoveryStreamPool {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl StreamPool {
+impl DiscoveryStreamPool {
     /// Builds a pool with the default `tcp` factory pre-registered.
     /// Callers plug additional schemes (typically `http`/`https` via
     /// [`with_http_factories`]) through [`with_factory`].
     ///
-    /// [`with_factory`]: StreamPool::with_factory
-    /// [`with_http_factories`]: StreamPool::with_http_factories
+    /// [`with_factory`]: DiscoveryStreamPool::with_factory
+    /// [`with_http_factories`]: DiscoveryStreamPool::with_http_factories
     pub fn new() -> Self {
         let pool = Self {
             streams: HashMap::new(),

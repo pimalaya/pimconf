@@ -1,3 +1,6 @@
+//! Build script baking feature, target and git metadata into the CLI
+//! binary through the pimalaya-cli build helpers.
+
 #[cfg(feature = "cli")]
 fn main() {
     use pimalaya_cli::build::{features_env, git_envs, target_envs};
@@ -9,5 +12,5 @@ fn main() {
 
 #[cfg(not(feature = "cli"))]
 fn main() {
-    // nothing to do
+    // NOTE: nothing to do without the CLI binary.
 }

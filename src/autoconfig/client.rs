@@ -3,7 +3,7 @@
 //! [`DiscoveryAutoconfigClientStd`] exposes one method per Mozilla
 //! autoconfig primitive ([`isp`], [`isp_fallback`], [`ispdb`],
 //! [`mx`], [`mailconf`]); each runs exactly one coroutine end-to-end
-//! through a local [`StreamPool`]. Composition (try several
+//! through a local [`DiscoveryStreamPool`]. Composition (try several
 //! candidates, fall back through MX-derived parents, race variants in
 //! parallel, ...) is the caller's responsibility.
 //!
@@ -40,7 +40,7 @@ use crate::{
         types::Autoconfig,
     },
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::pool::{Stream, StreamPool},
+    shared::pool::{DiscoveryStreamPool, Stream},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -64,7 +64,7 @@ pub enum DiscoveryAutoconfigClientStdError {
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// [`StreamPool::get`] failed (unknown scheme, factory error).
+    /// [`DiscoveryStreamPool::get`] failed (unknown scheme, factory error).
     #[error(transparent)]
     Pool(#[from] anyhow::Error),
 }
@@ -72,7 +72,7 @@ pub enum DiscoveryAutoconfigClientStdError {
 /// Std-blocking Mozilla autoconfig discovery client.
 pub struct DiscoveryAutoconfigClientStd {
     dns: Url,
-    pool: StreamPool,
+    pool: DiscoveryStreamPool,
 }
 
 impl DiscoveryAutoconfigClientStd {
@@ -88,7 +88,7 @@ impl DiscoveryAutoconfigClientStd {
     pub fn new(dns: Url) -> Self {
         Self {
             dns,
-            pool: StreamPool::new(),
+            pool: DiscoveryStreamPool::new(),
         }
     }
 

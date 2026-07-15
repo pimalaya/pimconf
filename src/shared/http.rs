@@ -1,6 +1,6 @@
 //! # Shared HTTP module
 //!
-//! [`HttpGet`] sends one HTTP/1.1 GET on a fully-qualified [`Url`]
+//! [`DiscoveryHttpGet`] sends one HTTP/1.1 GET on a fully-qualified [`Url`]
 //! and returns the raw response body bytes. It rejects redirects and
 //! non-success status codes: both autoconfig and PACC need the
 //! response that came from the original origin.
@@ -9,12 +9,12 @@
 //! parses the bytes as XML, PACC parses them as JSON and also keeps
 //! the raw bytes for digest verification.
 //!
-//! [`HttpGet`] sits at the io-http / io-pim-discovery boundary: it wraps
+//! [`DiscoveryHttpGet`] sits at the io-http / io-pim-discovery boundary: it wraps
 //! io-http's [`Http11Send`] and translates its
 //! [`HttpCoroutineState`](io_http::coroutine::HttpCoroutineState)
 //! into the io-pim-discovery shape, tagging every yielded I/O step with
 //! the request [`Url`] so the std client can route through
-//! [`crate::shared::pool::StreamPool`].
+//! [`crate::shared::pool::DiscoveryStreamPool`].
 
 use alloc::{borrow::ToOwned, vec::Vec};
 
@@ -34,7 +34,7 @@ use crate::coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYie
 
 /// Errors that can occur during a single HTTP GET exchange.
 #[derive(Debug, Error)]
-pub enum HttpGetError {
+pub enum DiscoveryHttpGetError {
     #[error("HTTP GET returned unexpected status {0}")]
     Status(u16),
     #[error("HTTP GET reached unexpected redirection {code} to {url}")]
@@ -45,12 +45,12 @@ pub enum HttpGetError {
 
 /// I/O-free coroutine that performs one HTTP GET and yields the
 /// response body as raw bytes.
-pub struct HttpGet {
+pub struct DiscoveryHttpGet {
     url: Url,
     send: Http11Send,
 }
 
-impl HttpGet {
+impl DiscoveryHttpGet {
     /// Builds a GET for `url`. Pair with an HTTP session opened on
     /// the same URL.
     pub fn new(url: Url) -> Self {
@@ -64,9 +64,9 @@ impl HttpGet {
     }
 }
 
-impl DiscoveryCoroutine for HttpGet {
+impl DiscoveryCoroutine for DiscoveryHttpGet {
     type Yield = DiscoveryYield;
-    type Return = Result<Vec<u8>, HttpGetError>;
+    type Return = Result<Vec<u8>, DiscoveryHttpGetError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.send.resume(arg) {
@@ -74,7 +74,9 @@ impl DiscoveryCoroutine for HttpGet {
                 if !response.status.is_success() =>
             {
                 trace!("{response:?}");
-                DiscoveryCoroutineState::Complete(Err(HttpGetError::Status(*response.status)))
+                DiscoveryCoroutineState::Complete(Err(DiscoveryHttpGetError::Status(
+                    *response.status,
+                )))
             }
             HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. })) => {
                 trace!("{response:?}");
@@ -93,7 +95,7 @@ impl DiscoveryCoroutine for HttpGet {
             }
             HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { response, url, .. }) => {
                 trace!("{response:?}");
-                DiscoveryCoroutineState::Complete(Err(HttpGetError::Redirect {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryHttpGetError::Redirect {
                     url,
                     code: *response.status,
                 }))

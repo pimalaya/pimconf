@@ -1,6 +1,6 @@
 //! # Config collector
 //!
-//! [`ConfigCollector`] is the pure half of a config compose: consumers
+//! [`DiscoveryConfigCollector`] is the pure half of a config compose: consumers
 //! run the discovery bricks however they want (sequentially, or in
 //! parallel on their own transports) and feed each mechanism's
 //! configs in mechanism-priority order; the collector filters them
@@ -10,19 +10,19 @@
 
 use alloc::{collections::BTreeSet, vec::Vec};
 
-use crate::compose::types::{Service, ServiceConfig};
+use crate::compose::types::{DiscoveryService, DiscoveryServiceConfig};
 
 /// Pure accumulator reducing per-mechanism config lists into one
 /// deduplicated list.
-pub struct ConfigCollector {
-    services: BTreeSet<Service>,
-    configs: Vec<ServiceConfig>,
+pub struct DiscoveryConfigCollector {
+    services: BTreeSet<DiscoveryService>,
+    configs: Vec<DiscoveryServiceConfig>,
 }
 
-impl ConfigCollector {
+impl DiscoveryConfigCollector {
     /// Builds a collector restricted to `services` (empty means all
     /// services).
-    pub fn new(services: BTreeSet<Service>) -> Self {
+    pub fn new(services: BTreeSet<DiscoveryService>) -> Self {
         Self {
             services,
             configs: Vec::new(),
@@ -32,7 +32,7 @@ impl ConfigCollector {
     /// Whether configs of this service are collected. Orchestrators
     /// use it to skip mechanisms that can only produce filtered-out
     /// services.
-    pub fn wants(&self, service: Service) -> bool {
+    pub fn wants(&self, service: DiscoveryService) -> bool {
         self.services.is_empty() || self.services.contains(&service)
     }
 
@@ -44,7 +44,7 @@ impl ConfigCollector {
     /// collected host counts as the same service reached through a
     /// rotated backend name: the parent host wins the endpoint, since
     /// only it is worth persisting in an account.
-    pub fn collect(&mut self, configs: Vec<ServiceConfig>) {
+    pub fn collect(&mut self, configs: Vec<DiscoveryServiceConfig>) {
         for config in configs {
             if !self.wants(config.service) {
                 continue;
@@ -81,7 +81,7 @@ impl ConfigCollector {
     }
 
     /// Returns the collected configs, consuming the collector.
-    pub fn finish(self) -> Vec<ServiceConfig> {
+    pub fn finish(self) -> Vec<DiscoveryServiceConfig> {
         self.configs
     }
 }

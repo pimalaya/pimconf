@@ -1,9 +1,9 @@
 //! # OAuth 2.0 Protected Resource Metadata (RFC 9728)
 //!
-//! [`ResolveOauthResource`] GETs a protected resource's well-known
+//! [`DiscoveryOauthResourceResolve`] GETs a protected resource's well-known
 //! metadata document (or the URL a 401 pointed at, see
 //! [`challenge_resource_metadata`]) and parses it into
-//! [`OauthResourceMetadata`], whose `authorization_servers` point at
+//! [`DiscoveryOauthResourceMetadata`], whose `authorization_servers` point at
 //! the RFC 8414 metadata that can issue tokens for the resource. It is
 //! the structured follow-up to the `WWW-Authenticate` scheme probe.
 //!
@@ -14,7 +14,7 @@ use alloc::{string::String, vec::Vec};
 use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState},
     rfc9110::{
-        challenge::parse_challenges,
+        challenge::HttpChallenge,
         request::HttpRequest,
         send::{HttpSendOutput, HttpSendYield},
     },
@@ -35,7 +35,7 @@ use crate::{
 ///
 /// Refs: <https://datatracker.ietf.org/doc/html/rfc9728#section-2>
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct OauthResourceMetadata {
+pub struct DiscoveryOauthResourceMetadata {
     /// The resource's identifier.
     pub resource: Url,
 
@@ -71,7 +71,7 @@ pub struct OauthResourceMetadata {
     pub resource_tos_uri: Option<Url>,
 }
 
-impl OauthResourceMetadata {
+impl DiscoveryOauthResourceMetadata {
     /// Builds the metadata's well-known URL for a resource, inserting
     /// the well-known path between host and resource path components
     /// (the same transformation rule as RFC 8414 §3.1).
@@ -83,7 +83,7 @@ impl OauthResourceMetadata {
 }
 
 /// Deserializes resource metadata from JSON bytes.
-impl TryFrom<&[u8]> for OauthResourceMetadata {
+impl TryFrom<&[u8]> for DiscoveryOauthResourceMetadata {
     type Error = serde_json::Error;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
@@ -98,15 +98,15 @@ impl TryFrom<&[u8]> for OauthResourceMetadata {
 ///
 /// Refs: <https://datatracker.ietf.org/doc/html/rfc9728#section-5.1>
 pub fn challenge_resource_metadata(value: &str) -> Option<Url> {
-    parse_challenges(value)
+    HttpChallenge::parse_all(value)
         .iter()
         .find_map(|challenge| challenge.param("resource_metadata"))
         .and_then(|url| Url::parse(url).ok())
 }
 
-/// Errors emitted by [`ResolveOauthResource`].
+/// Errors emitted by [`DiscoveryOauthResourceResolve`].
 #[derive(Debug, Error)]
-pub enum ResolveOauthResourceError {
+pub enum DiscoveryOauthResourceResolveError {
     #[error(transparent)]
     SendHttpFetch(#[from] Http11SendError),
     #[error(transparent)]
@@ -120,15 +120,15 @@ pub enum ResolveOauthResourceError {
 /// I/O-free coroutine that GETs a protected resource's metadata URL
 /// (from a `WWW-Authenticate` challenge via
 /// [`challenge_resource_metadata`], or built with
-/// [`OauthResourceMetadata::well_known_url`]) and parses the JSON
+/// [`DiscoveryOauthResourceMetadata::well_known_url`]) and parses the JSON
 /// metadata. Yields its target URL on every step so the std client
 /// routes bytes through the matching HTTPS stream.
-pub struct ResolveOauthResource {
+pub struct DiscoveryOauthResourceResolve {
     target: Url,
     send: Http11Send,
 }
 
-impl ResolveOauthResource {
+impl DiscoveryOauthResourceResolve {
     /// Builds a coroutine fetching the metadata document at `url`.
     pub fn new(url: Url) -> Self {
         let request = HttpRequest::get(url.clone()).header("Accept", "application/json");
@@ -140,22 +140,22 @@ impl ResolveOauthResource {
     }
 }
 
-impl DiscoveryCoroutine for ResolveOauthResource {
+impl DiscoveryCoroutine for DiscoveryOauthResourceResolve {
     type Yield = DiscoveryYield;
-    type Return = Result<OauthResourceMetadata, ResolveOauthResourceError>;
+    type Return = Result<DiscoveryOauthResourceMetadata, DiscoveryOauthResourceResolveError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.send.resume(arg) {
             HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. }))
                 if response.status.is_success() =>
             {
-                match OauthResourceMetadata::try_from(response.body.as_slice()) {
+                match DiscoveryOauthResourceMetadata::try_from(response.body.as_slice()) {
                     Ok(metadata) => DiscoveryCoroutineState::Complete(Ok(metadata)),
                     Err(err) => DiscoveryCoroutineState::Complete(Err(err.into())),
                 }
             }
             HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. })) => {
-                DiscoveryCoroutineState::Complete(Err(ResolveOauthResourceError::Status {
+                DiscoveryCoroutineState::Complete(Err(DiscoveryOauthResourceResolveError::Status {
                     code: *response.status,
                 }))
             }
@@ -171,10 +171,12 @@ impl DiscoveryCoroutine for ResolveOauthResource {
                 })
             }
             HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { url, response, .. }) => {
-                DiscoveryCoroutineState::Complete(Err(ResolveOauthResourceError::Redirect {
-                    url,
-                    code: *response.status,
-                }))
+                DiscoveryCoroutineState::Complete(Err(
+                    DiscoveryOauthResourceResolveError::Redirect {
+                        url,
+                        code: *response.status,
+                    },
+                ))
             }
             HttpCoroutineState::Complete(Err(err)) => {
                 DiscoveryCoroutineState::Complete(Err(err.into()))
@@ -187,13 +189,13 @@ impl DiscoveryCoroutine for ResolveOauthResource {
 mod tests {
     use url::Url;
 
-    use crate::rfc9728::{OauthResourceMetadata, challenge_resource_metadata};
+    use crate::rfc9728::{DiscoveryOauthResourceMetadata, challenge_resource_metadata};
 
     #[test]
     fn well_known_url_inserts_the_resource_path() {
         let resource: Url = "https://api.example.com/jmap/session".parse().unwrap();
         assert_eq!(
-            OauthResourceMetadata::well_known_url(&resource).as_str(),
+            DiscoveryOauthResourceMetadata::well_known_url(&resource).as_str(),
             "https://api.example.com/.well-known/oauth-protected-resource/jmap/session",
         );
     }

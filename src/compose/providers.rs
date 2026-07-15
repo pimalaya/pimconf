@@ -11,7 +11,9 @@ use alloc::{format, string::ToString, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
-use crate::compose::types::{AuthMethod, ConfigSource, Endpoint, Security, Service, ServiceConfig};
+use crate::compose::types::{
+    ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint, Security,
+};
 
 /// A provider covered by a fixed rule.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -63,7 +65,7 @@ impl Provider {
     }
 
     /// Returns the fixed configs for `email` on this provider.
-    pub fn configs(self, email: &str) -> Vec<ServiceConfig> {
+    pub fn configs(self, email: &str) -> Vec<DiscoveryServiceConfig> {
         match self {
             Self::Google => google_configs(email),
             Self::Microsoft => microsoft_configs(email),
@@ -71,7 +73,7 @@ impl Provider {
     }
 }
 
-fn google_configs(email: &str) -> Vec<ServiceConfig> {
+fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
     let source = ConfigSource::Provider(Provider::Google);
 
     // NOTE: no device authorization grant: Google's device flow
@@ -79,16 +81,16 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
     // and Contacts. Password stands for an app password, which
     // requires 2-step verification on the account.
     let mail_auth = vec![
-        AuthMethod::OauthAuthorizationCodeGrant {
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
             authorization_endpoint: GOOGLE_AUTHORIZATION_ENDPOINT.to_string(),
             token_endpoint: GOOGLE_TOKEN_ENDPOINT.to_string(),
             scope: Some("https://mail.google.com/".to_string()),
         },
-        AuthMethod::Password,
+        DiscoveryAuthMethod::Password,
     ];
 
     let dav_auth = |scope: &str| {
-        vec![AuthMethod::OauthAuthorizationCodeGrant {
+        vec![DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
             authorization_endpoint: GOOGLE_AUTHORIZATION_ENDPOINT.to_string(),
             token_endpoint: GOOGLE_TOKEN_ENDPOINT.to_string(),
             scope: Some(scope.to_string()),
@@ -96,8 +98,8 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
     };
 
     vec![
-        ServiceConfig {
-            service: Service::Imap,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Imap,
             endpoint: Endpoint::Tcp {
                 host: "imap.gmail.com".to_string(),
                 port: 993,
@@ -107,8 +109,8 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
             auth: mail_auth.clone(),
             source,
         },
-        ServiceConfig {
-            service: Service::Pop3,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Pop3,
             endpoint: Endpoint::Tcp {
                 host: "pop.gmail.com".to_string(),
                 port: 995,
@@ -118,8 +120,8 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
             auth: mail_auth.clone(),
             source,
         },
-        ServiceConfig {
-            service: Service::Smtp,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Smtp,
             endpoint: Endpoint::Tcp {
                 host: "smtp.gmail.com".to_string(),
                 port: 465,
@@ -129,8 +131,8 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
             auth: mail_auth,
             source,
         },
-        ServiceConfig {
-            service: Service::Caldav,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Caldav,
             endpoint: Endpoint::Http(format!(
                 "https://apidata.googleusercontent.com/caldav/v2/{email}/user"
             )),
@@ -138,8 +140,8 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
             auth: dav_auth("https://www.googleapis.com/auth/calendar"),
             source,
         },
-        ServiceConfig {
-            service: Service::Carddav,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Carddav,
             endpoint: Endpoint::Http(format!(
                 "https://www.googleapis.com/carddav/v1/principals/{email}/"
             )),
@@ -150,7 +152,7 @@ fn google_configs(email: &str) -> Vec<ServiceConfig> {
     ]
 }
 
-fn microsoft_configs(email: &str) -> Vec<ServiceConfig> {
+fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
     let source = ConfigSource::Provider(Provider::Microsoft);
 
     // NOTE: no password: Exchange Online retired basic
@@ -160,12 +162,12 @@ fn microsoft_configs(email: &str) -> Vec<ServiceConfig> {
         let scope = Some(format!("{scope} offline_access"));
 
         vec![
-            AuthMethod::OauthAuthorizationCodeGrant {
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
                 authorization_endpoint: MICROSOFT_AUTHORIZATION_ENDPOINT.to_string(),
                 token_endpoint: MICROSOFT_TOKEN_ENDPOINT.to_string(),
                 scope: scope.clone(),
             },
-            AuthMethod::OauthDeviceAuthorizationGrant {
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                 device_authorization_endpoint: MICROSOFT_DEVICE_AUTHORIZATION_ENDPOINT.to_string(),
                 token_endpoint: MICROSOFT_TOKEN_ENDPOINT.to_string(),
                 scope,
@@ -174,8 +176,8 @@ fn microsoft_configs(email: &str) -> Vec<ServiceConfig> {
     };
 
     vec![
-        ServiceConfig {
-            service: Service::Imap,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Imap,
             endpoint: Endpoint::Tcp {
                 host: "outlook.office365.com".to_string(),
                 port: 993,
@@ -185,8 +187,8 @@ fn microsoft_configs(email: &str) -> Vec<ServiceConfig> {
             auth: auth("https://outlook.office365.com/IMAP.AccessAsUser.All"),
             source,
         },
-        ServiceConfig {
-            service: Service::Pop3,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Pop3,
             endpoint: Endpoint::Tcp {
                 host: "outlook.office365.com".to_string(),
                 port: 995,
@@ -196,8 +198,8 @@ fn microsoft_configs(email: &str) -> Vec<ServiceConfig> {
             auth: auth("https://outlook.office365.com/POP.AccessAsUser.All"),
             source,
         },
-        ServiceConfig {
-            service: Service::Smtp,
+        DiscoveryServiceConfig {
+            service: DiscoveryService::Smtp,
             endpoint: Endpoint::Tcp {
                 host: "smtp.office365.com".to_string(),
                 port: 587,

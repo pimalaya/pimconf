@@ -1,235 +1,115 @@
-# 🪄 io-pim-discovery [![Documentation](https://img.shields.io/docsrs/io-pim-discovery?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/io-pim-discovery/latest/io_pim_discovery) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# io-pim-discovery [![Documentation](https://img.shields.io/docsrs/io-pim-discovery?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/io-pim-discovery/latest/io_pim_discovery) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI and lib to discover PIM-related services, written in Rust.
+PIM discovery CLI and client library for Rust
 
-This repository ships three things:
+This project is composed of 3 feature-gated layers:
 
-- Low-level **I/O-free** coroutines (no_std state machines that emit read/write requests)
-- Mid-level clients, based on coroutines (standard, blocking)
-- High-level CLI, based on std clients
+- Low-level **I/O-free** coroutines: no_std state machines containing the whole discovery logic, usable anywhere
+- Mid-level **clients**, based on coroutines (standard, blocking)
+- High-level **CLI**, based on the std clients
 
 ## Table of contents
 
 - [Features](#features)
+- [Coverage](#coverage)
 - [Installation](#installation)
-  - [Pre-built binary](#pre-built-binary)
-  - [Cargo](#cargo)
-  - [Nix](#nix)
-  - [Sources](#sources)
 - [Usage](#usage)
-  - [Library](#library)
-  - [CLI](#cli)
 - [FAQ](#faq)
-- [License](#license)
 - [AI disclosure](#ai-disclosure)
+- [License](#license)
 - [Social](#social)
+- [Contributing](#contributing)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- **Mozilla Thunderbird Autoconfiguration** support <sup>[wiki](https://wiki.mozilla.org/Thunderbird:Autoconfiguration)</sup> (requires `autoconfig` feature):
-  - ISP main and `/.well-known/` URL lookups
-  - Thunderbird ISPDB lookup
-  - DNS MX-based retry against the MX target's parent domain
-  - DNS TXT `mailconf=<URL>` redirect
-- **RFC 6186 SRV** mail service discovery <sup>[rfc6186](https://datatracker.ietf.org/doc/html/rfc6186)</sup> (requires `rfc6186` feature):
-  - `_imap._tcp`, `_imaps._tcp`, `_submission._tcp` assembly into a single report
-- **RFC 6764** CalDAV/CardDAV discovery <sup>[rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)</sup> (requires `rfc6764` feature), covering all three mechanisms:
-  - DNS SRV: `_caldav._tcp`, `_caldavs._tcp`, `_carddav._tcp`, `_carddavs._tcp` assembly into a single report
-  - DNS TXT: `path` context lookup on the SRV name
-  - `/.well-known/{caldav,carddav}` redirect probe, plus a combined `domain -> context root` resolve chaining SRV, then TXT, then `.well-known`
-- **RFC 8620** JMAP service autodiscovery <sup>[rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)</sup> (requires `rfc8620` feature):
-  - DNS SRV: `_jmap._tcp` origin lookup
-  - `/.well-known/jmap` session probe following any redirect chain (a terminal 2xx or 401 locates the session resource; anything else means no JMAP), plus a combined `domain -> session URL` resolve chaining SRV then `.well-known`
-- **OAuth 2.0 metadata** discovery: authorization server metadata <sup>[rfc8414](https://datatracker.ietf.org/doc/html/rfc8414)</sup> (requires `rfc8414` feature) and protected resource metadata <sup>[rfc9728](https://datatracker.ietf.org/doc/html/rfc9728)</sup> (requires `rfc9728` feature), resolving a discovered issuer into concrete authorization/token/registration endpoints
-- **Unified compose** from a single email address (part of the lib, gated on `stream`; it is a thread-spawning std client rather than an I/O-free coroutine, and it composes whichever mechanisms are enabled next to `stream`):
-  - chains fixed provider rules (Google, Microsoft, matched by domain then by MX records), PACC, autoconfig, RFC 6186 SRV, RFC 6764 CalDAV/CardDAV and RFC 8620 JMAP discovery
-  - reduces everything to one list of service configs (endpoint, username, authentication methods: password, OAuth 2.0 authorization code grant, OAuth 2.0 device authorization grant, OAuth 2.0 issuer)
-  - compose-all collects configs from every mechanism, compose-first stops at the first mechanism yielding one
-- **PACC** discovery support <sup>[draft-ietf-mailmaint-pacc-02](https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02)</sup> (requires `pacc` feature):
-  - Well-known JSON configuration fetch
-  - SHA-256 digest verification against the `_ua-auto-config` TXT record
-- **RFC 8484** DNS-over-HTTPS <sup>[rfc8484](https://datatracker.ietf.org/doc/html/rfc8484)</sup>: every DNS lookup (MX, TXT, SRV) accepts an `https://…/dns-query` resolver URL next to the default `tcp://host:port` transport, so discovery works on networks that block outbound DNS
+- **Email discovery**: find a domain's incoming and outgoing mail servers through Mozilla autoconfig, the Thunderbird ISPDB, DNS SRV records, DNS TXT redirects and PACC well-known configuration.
+- **Calendar and contacts discovery**: locate a domain's CalDAV and CardDAV home through DNS SRV, DNS TXT context lookups and well-known probes.
+- **JMAP discovery**: resolve a domain to its JMAP session URL through DNS SRV and the well-known session probe.
+- **Authentication discovery**: probe a URL's authentication schemes and fetch a provider's OAuth 2.0 authorization-server and protected-resource metadata to learn where and how to obtain tokens.
+- **Unified compose**: from a single email address, chain the known-provider rules and every enabled mechanism into one ranked list of service configurations, either collecting all of them or stopping at the first match.
+- **DNS over HTTPS**: every DNS lookup accepts an `https` resolver so discovery works on networks that block plain DNS.
+- **JSON output**: machine-readable results from the CLI with a single flag.
 - **TLS** support:
-  - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature)
+  - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
   - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
-- **JSON** output via `--json`
 
 > [!TIP]
-> io-pim-discovery is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
+> io-pim-discovery is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate each mechanism. The default feature set is declared in [Cargo.toml](./Cargo.toml) or on [docs.rs](https://docs.rs/crate/io-pim-discovery/latest/features).
+
+## Coverage
+
+| Spec | What is covered |
+|------|-----------------|
+| [Autoconfig] | Mozilla Thunderbird autoconfiguration: ISP main and well-known lookups, ISPDB, DNS MX retry and DNS TXT `mailconf` redirect (requires `autoconfig`) |
+| [PACC] | Provider-authenticated client configuration: well-known JSON fetch with SHA-256 digest verification against the `_ua-auto-config` TXT record (requires `pacc`) |
+| [6186] | DNS SRV mail discovery: `_imap`, `_imaps`, `_submission` assembled into one report (requires `rfc6186`) |
+| [6764] | CalDAV and CardDAV discovery: DNS SRV, DNS TXT context and well-known probe, chained into a context-root resolve (requires `rfc6764`) |
+| [8484] | DNS over HTTPS: every lookup accepts an `https://…/dns-query` resolver next to plain `tcp://host:port` |
+| [8620] | JMAP autodiscovery: DNS SRV origin lookup and well-known session probe, chained into a session-URL resolve (requires `rfc8620`) |
+| [8414] | OAuth 2.0 authorization server metadata: resolve an issuer into its authorization, token and registration endpoints (requires `rfc8414`) |
+| [9728] | OAuth 2.0 protected resource metadata: resolve a resource into the authorization servers that can issue tokens for it (requires `rfc9728`) |
+
+[Autoconfig]: https://wiki.mozilla.org/Thunderbird:Autoconfiguration
+[PACC]: https://datatracker.ietf.org/doc/html/draft-ietf-mailmaint-pacc-02
+[6186]: https://datatracker.ietf.org/doc/html/rfc6186
+[6764]: https://datatracker.ietf.org/doc/html/rfc6764
+[8484]: https://datatracker.ietf.org/doc/html/rfc8484
+[8620]: https://datatracker.ietf.org/doc/html/rfc8620
+[8414]: https://datatracker.ietf.org/doc/html/rfc8414
+[9728]: https://datatracker.ietf.org/doc/html/rfc9728
 
 ## Installation
 
-### Pre-built binary
+The CLI binary `pim-discovery` has not been officially released yet. Pre-built binaries from the `master` branch are attached to the [releases](https://github.com/pimalaya/io-pim-discovery/actions/workflows/releases.yml) workflow, under its *Artifacts* section, built with the default features plus `cli`.
 
-The CLI binary `pim-discovery` has not been officially released yet. Check the [releases](https://github.com/pimalaya/io-pim-discovery/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
-
-> [!NOTE]
-> Pre-built binaries are built with the default cargo features, plus `cli`. If you need more features, please use another installation method.
-
-### Cargo
+Install from [crates.io](https://crates.io/crates/io-pim-discovery) with cargo:
 
 ```sh
 cargo install io-pim-discovery --locked --features cli
 ```
 
-You can also use the git repository for a more up-to-date (but less stable) version:
-
-```sh
-cargo install --locked --features cli --git https://github.com/pimalaya/io-pim-discovery.git
-```
-
-To use io-pim-discovery as a library, add it to your Cargo.toml:
-
-```toml
-[dependencies]
-io-pim-discovery = { version = "0.1", default-features = false, features = ["autoconfig", "pacc", "rfc6186", "rfc6764", "client"] }
-```
-
-The `client` feature pulls in the `std`-blocking helpers. Drop it (and pick any combination of `autoconfig` / `pacc` / `rfc6186` / `rfc6764` / `rfc8620`) for a `no_std`-friendly, pure-coroutine build.
-
-### Nix
-
-If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+Or with [Nix](https://nixos.wiki/wiki/Flakes):
 
 ```sh
 nix profile install github:pimalaya/io-pim-discovery
 ```
 
-Or run without installing:
-
-```sh
-nix run github:pimalaya/io-pim-discovery -- autoconfig <local-part> <domain>
-```
-
-### Sources
-
-```sh
-git clone https://github.com/pimalaya/io-pim-discovery
-cd io-pim-discovery
-nix run
-```
+To use io-pim-discovery as a library, add it to your `Cargo.toml` and pick the mechanisms you need; the API is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
 
 ## Usage
 
-### Library
-
-Using a low-level DNS MX I/O-free coroutine:
-
-```rust,ignore
-use std::{io::{Read, Write}, net::TcpStream};
-use io_pim_discovery::{
-    autoconfig::mx::DiscoveryDnsMx,
-    coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-};
-use url::Url;
-
-let resolver = Url::parse("tcp://1.1.1.1:53").unwrap();
-let mut stream = TcpStream::connect("1.1.1.1:53").unwrap();
-let mut coroutine = DiscoveryDnsMx::new("fastmail.com", resolver);
-let mut buf = [0u8; 4096];
-let mut arg: Option<&[u8]> = None;
-
-let records = loop {
-    match coroutine.resume(arg.take()) {
-        DiscoveryCoroutineState::Complete(Ok(records)) => break records,
-        DiscoveryCoroutineState::Complete(Err(err)) => panic!("{err}"),
-        DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsWrite { bytes, .. }) => {
-            stream.write_all(&bytes).unwrap();
-        }
-        DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead { .. }) => {
-            let n = stream.read(&mut buf).unwrap();
-            arg = Some(&buf[..n]);
-        }
-    }
-};
-
-for record in records {
-    println!("- {} {}", record.rdata.preference.get(), record.rdata.exchange);
-}
-```
-
-Using a mid-level std PACC client:
-
-```rust,ignore
-use io_pim_discovery::pacc::client::DiscoveryPaccClientStd;
-use pimalaya_stream::tls::Tls;
-use url::Url;
-
-let dns = Url::parse("tcp://1.1.1.1:53").unwrap();
-let mut client = DiscoveryPaccClientStd::new(dns).with_tls(Tls::default());
-
-let config = client.discover("fastmail.com").unwrap();
-println!("{config:#?}");
-```
-
-The CLI is organised by PIM domain (`email`, `calendar`, `contact`, `file`), plus `all` and `auth`. Every mechanism is exposed independently (no merging); the SOURCE column tells the rows apart.
-
-Discover everything for an email address, grouped by domain:
+The CLI is organised by PIM domain (`email`, `calendar`, `contact`, `file`), plus `all` and `auth`; each mechanism is exposed independently and the source column tells the rows apart. A few real-world invocations:
 
 ```sh
 pim-discovery all user@fastmail.com
-```
-
-Discover one domain, either the first mechanism that yields a config, or one specific mechanism:
-
-```sh
 pim-discovery email first user@fastmail.com
-pim-discovery email autoconfig user@fastmail.com
-pim-discovery email srv user@fastmail.com
-pim-discovery email pacc user@fastmail.com
-pim-discovery email jmap user@fastmail.com
-
-pim-discovery calendar first fastmail.com
 pim-discovery calendar dav fastmail.com
-pim-discovery contact dav fastmail.com
-pim-discovery file pacc fastmail.com
-```
-
-Check whether an address is hosted by a known provider (the same rule `first` and `all` try before the generic mechanisms):
-
-```sh
-pim-discovery email is-google user@gmail.com
-pim-discovery email is-microsoft user@outlook.com
-```
-
-Discover how and where to authenticate: probe an HTTP endpoint's `WWW-Authenticate` schemes, fetch an OAuth 2.0 authorization server's metadata (RFC 8414), or a protected resource's metadata (RFC 9728):
-
-```sh
-pim-discovery auth http https://carddav.fastmail.com
 pim-discovery auth server https://api.fastmail.com
-pim-discovery auth resource https://api.fastmail.com/jmap/session
-```
-
-JSON output, and picking a specific TLS stack and crypto provider:
-
-```sh
 pim-discovery --json all user@fastmail.com
-pim-discovery --tls rustls --rustls-crypto ring email autoconfig user@fastmail.com
-pim-discovery --tls native-tls email is-google user@gmail.com
-pim-discovery --tls-cert /path/to/extra-root.pem all user@fastmail.com
 ```
+
+Run `pim-discovery --help` for the full command tree, flags and TLS options. The library API, including every coroutine and client, is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
 
 ## FAQ
 
 <details>
   <summary>How to debug the CLI?</summary>
 
-  Use `--log <level>` where `<level>` is one of `off`, `error`, `warn`, `info`, `debug`, `trace`:
-
-  ```sh
-  pim-discovery --log trace all user@fastmail.com
-  ```
-
-  The `RUST_LOG` environment variable, when set, overrides `--log` and supports per-target filters (see the [env_logger](https://docs.rs/env_logger/latest/env_logger/#enabling-logging) documentation). `RUST_BACKTRACE=1` enables full error backtraces.
-
-  Logs are written to `stderr`, so they can be redirected easily to a file:
-
-  ```sh
-  pim-discovery --log trace all user@fastmail.com 2>/tmp/pim-discovery.log
-  ```
+  Use `--log <level>` where `<level>` is one of `off`, `error`, `warn`, `info`, `debug`, `trace`. The `RUST_LOG` environment variable, when set, overrides `--log` and supports per-target filters (see the [env_logger](https://docs.rs/env_logger/latest/env_logger/#enabling-logging) documentation), and `RUST_BACKTRACE=1` enables full error backtraces. Logs are written to stderr, so they can be redirected to a file.
 </details>
+
+## AI disclosure
+
+This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
+
+- **Tools**: Claude Code (Anthropic), invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
+- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+- **Last reviewed**: 15/07/2026
 
 ## License
 
@@ -240,27 +120,15 @@ This project is licensed under either of:
 
 at your option.
 
-## AI disclosure
-
-This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
-
-- **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
-
-- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
-
-- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
-
-- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
-
-- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-
-- **Last reviewed**: 31/05/2026
-
 ## Social
 
 - Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
 - News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
 - Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
+
+## Contributing
+
+Contributions are welcome: start with [CONTRIBUTING.md](./CONTRIBUTING.md), which opens with the Pimalaya-wide guides to read first.
 
 ## Sponsoring
 
@@ -279,5 +147,5 @@ If you appreciate the project, feel free to donate using one of the following pr
 [![Ko-fi](https://img.shields.io/badge/-Ko--fi-ff5e5a?logo=Ko-fi&logoColor=ffffff)](https://ko-fi.com/soywod)
 [![Buy Me a Coffee](https://img.shields.io/badge/-Buy%20Me%20a%20Coffee-ffdd00?logo=Buy%20Me%20A%20Coffee&logoColor=000000)](https://www.buymeacoffee.com/soywod)
 [![Liberapay](https://img.shields.io/badge/-Liberapay-f6c915?logo=Liberapay&logoColor=222222)](https://liberapay.com/soywod)
-[![thanks.dev](https://img.shields.io/badge/-thanks.dev-000000?logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQuMDk3IiBoZWlnaHQ9IjE3LjU5NyIgY2xhc3M9InctMzYgbWwtMiBsZzpteC0wIHByaW50Om14LTAgcHJpbnQ6aW52ZXJ0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik05Ljc4MyAxNy41OTdINy4zOThjLTEuMTY4IDAtMi4wOTItLjI5Ny0yLjc3My0uODktLjY4LS41OTMtMS4wMi0xLjQ2Mi0xLjAyLTIuNjA2di0xLjM0NmMwLTEuMDE4LS4yMjctMS43NS0uNjc4LTIuMTk1LS40NTItLjQ0Ni0xLjIzMi0uNjY5LTIuMzQtLjY2OUgwVjcuNzA1aC41ODdjMS4xMDggMCAxLjg4OC0uMjIyIDIuMzQtLjY2OC40NTEtLjQ0Ni42NzctMS4xNzcuNjc3LTIuMTk1VjMuNDk2YzAtMS4xNDQuMzQtMi4wMTMgMS4wMjEtMi42MDZDNS4zMDUuMjk3IDYuMjMgMCA3LjM5OCAwaDIuMzg1djEuOTg3aC0uOTg1Yy0uMzYxIDAtLjY4OC4wMjctLjk4LjA4MmExLjcxOSAxLjcxOSAwIDAgMC0uNzM2LjMwN2MtLjIwNS4xNTYtLjM1OC4zODQtLjQ2LjY4Mi0uMTAzLjI5OC0uMTU0LjY4Mi0uMTU0IDEuMTUxVjUuMjNjMCAuODY3LS4yNDkgMS41ODYtLjc0NSAyLjE1NS0uNDk3LjU2OS0xLjE1OCAxLjAwNC0xLjk4MyAxLjMwNXYuMjE3Yy44MjUuMyAxLjQ4Ni43MzYgMS45ODMgMS4zMDUuNDk2LjU3Ljc0NSAxLjI4Ny43NDUgMi4xNTR2MS4wMjFjMCAuNDcuMDUxLjg1NC4xNTMgMS4xNTIuMTAzLjI5OC4yNTYuNTI1LjQ2MS42ODIuMTkzLjE1Ny40MzcuMjYuNzMyLjMxMi4yOTUuMDUuNjIzLjA3Ni45ODQuMDc2aC45ODVabTE0LjMxNC03LjcwNmgtLjU4OGMtMS4xMDggMC0xLjg4OC4yMjMtMi4zNC42NjktLjQ1LjQ0NS0uNjc3IDEuMTc3LS42NzcgMi4xOTVWMTQuMWMwIDEuMTQ0LS4zNCAyLjAxMy0xLjAyIDIuNjA2LS42OC41OTMtMS42MDUuODktMi43NzQuODloLTIuMzg0di0xLjk4OGguOTg0Yy4zNjIgMCAuNjg4LS4wMjcuOTgtLjA4LjI5Mi0uMDU1LjUzOC0uMTU3LjczNy0uMzA4LjIwNC0uMTU3LjM1OC0uMzg0LjQ2LS42ODIuMTAzLS4yOTguMTU0LS42ODIuMTU0LTEuMTUydi0xLjAyYzAtLjg2OC4yNDgtMS41ODYuNzQ1LTIuMTU1LjQ5Ny0uNTcgMS4xNTgtMS4wMDQgMS45ODMtMS4zMDV2LS4yMTdjLS44MjUtLjMwMS0xLjQ4Ni0uNzM2LTEuOTgzLTEuMzA1LS40OTctLjU3LS43NDUtMS4yODgtLjc0NS0yLjE1NXYtMS4wMmMwLS40Ny0uMDUxLS44NTQtLjE1NC0xLjE1Mi0uMTAyLS4yOTgtLjI1Ni0uNTI2LS40Ni0uNjgyYTEuNzE5IDEuNzE5IDAgMCAwLS43MzctLjMwNyA1LjM5NSA1LjM5NSAwIDAgMC0uOTgtLjA4MmgtLjk4NFYwaDIuMzg0YzEuMTY5IDAgMi4wOTMuMjk3IDIuNzc0Ljg5LjY4LjU5MyAxLjAyIDEuNDYyIDEuMDIgMi42MDZ2MS4zNDZjMCAxLjAxOC4yMjYgMS43NS42NzggMi4xOTUuNDUxLjQ0NiAxLjIzMS42NjggMi4zNC42NjhoLjU4N3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=)](https://thanks.dev/soywod)
+[![thanks.dev](https://img.shields.io/badge/-thanks.dev-000000?logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQuMDk3IiBoZWlnaHQ9IjE3LjU5NyIgY2xhc3M9InctMzYgbWwtMiBsZzpteC0wIHByaW50Om14LTAgcHJpbnQ6aW52ZXJ0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik05Ljc4MyAxNy41OTdINy4zOThjLTEuMTY4IDAtMi4wOTItLjI5Ny0yLjc3My0uODktLjY4LS41OTMtMS4wMi0xLjQ2Mi0xLjAyLTIuNjA2di0xLjM0NmMwLTEuMDE4LS4yMjctMS43NS0uNjc4LTIuMTk1LS40NTItLjQ0Ni0xLjIzMi0uNjY5LTIuMzQtLjY2OUgwVjcuNzA1aC41ODdjMS4xMDggMCAxLjg4OC0uMjIyIDIuMzQtLjY2OC40NTEtLjQ0Ni42NzctMS4xNzcuNjc3LTIuMTk1VjMuNDk2YzAtMS4xNDQuMzQtMi4wMTMgMS4wMjEtMi42MDZDNS4zMDUuMjk3IDYuMjMgMCA3LjM5OCAwaDIuMzg1djEuOTg3aC0uOTg1Yy0uMzYxIDAtLjY4OC4wMjctLjk4LjA4MmExLjcxOSAxLjcxOSAwIDAgMC0uNzM2LjMwN2MtLjIwNS4xNTYtLjM1OC4zODQtLjQ2LjY4Mi0uMTAzLjI5OC0uMTU0LjY4Mi0uMTU0IDEuMTUxVjUuMjNjMCAuODY3LS4yNDkgMS41ODYtLjc0NSAyLjE1NS0uNDk3LjU2OS0xLjE1OCAxLjAwNC0xLjk4MyAxLjMwNXYuMjE3Yy44MjUuMyAxLjQ4Ni43MzYgMS45ODMgMS4zMDUuNDk2LjU3Ljc0NSAxLjI4Ny43NDUgMi4xNTR2MS4wMjFjMCAuNDcuMDUxLjg1NC4xNTMgMS4xNTIuMTAzLjI5OC4yNTYuNTI1LjQ2MS42ODIuMTkzLjE1Ny40MzcuMjYuNzMyLjMxMi4yOTUuMDUuNjIzLjA3Ni45ODQuMDc2aC45ODVabTE0LjMxNC03LjcwNmgtLjU4OGMtMS4xMDggMC0xLjg4OC4yMjMtMi4zNC42NjktLjQ1LjQ0Ni0uNjc3IDEuMTc3LS42NzcgMi4xOTVWMTQuMWMwIDEuMTQ0LS4zNCAyLjAxMy0xLjAyIDIuNjA2LS42OC41OTMtMS42MDUuODktMi43NzQuODloLTIuMzg0di0xLjk4OGguOTg0Yy4zNjIgMCAuNjg4LS4wMjcuOTgtLjA4LjI5Mi0uMDU1LjUzOC0uMTU3LjczNy0uMzA4LjIwNC0uMTU3LjM1OC0uMzg0LjQ2LS42ODIuMTAzLS4yOTguMTU0LS42ODIuMTU0LTEuMTUydi0xLjAyYzAtLjg2OC4yNDgtMS41ODYuNzQ1LTIuMTU1LjQ5Ny0uNTcgMS4xNTgtMS4wMDQgMS45ODMtMS4zMDV2LS4yMTdjLS44MjUtLjMwMS0xLjQ4Ni0uNzM2LTEuOTgzLTEuMzA1LS40OTctLjU3LS43NDUtMS4yODgtLjc0NS0yLjE1NXYtMS4wMmMwLS40Ny0uMDUxLS44NTQtLjE1NC0xLjE1Mi0uMTAyLS4yOTgtLjI1Ni0uNTI2LS40Ni0uNjgyYTEuNzE5IDEuNzE5IDAgMCAwLS43MzctLjMwNyA1LjM5NSA1LjM5NSAwIDAgMC0uOTgtLjA4MmgtLjk4NFYwaDIuMzg0YzEuMTY5IDAgMi4wOTMuMjk3IDIuNzc0Ljg5LjY4LjU5MyAxLjAyIDEuNDYyIDEuMDIgMi42MDZ2MS4zNDZjMCAxLjAxOC4yMjYgMS43NS42NzggMi4xOTUuNDUxLjQ0NiAxLjIzMS42NjggMi4zNC42NjhoLjU4N3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=)](https://thanks.dev/soywod)
 [![PayPal](https://img.shields.io/badge/-PayPal-0079c1?logo=PayPal&logoColor=ffffff)](https://www.paypal.com/paypalme/soywod)

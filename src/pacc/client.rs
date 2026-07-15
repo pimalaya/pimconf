@@ -1,7 +1,7 @@
 //! # Standard, blocking PACC discovery client
 //!
 //! [`DiscoveryPaccClientStd`] drives the [`DiscoveryPacc`] coroutine
-//! end-to-end through a local [`StreamPool`]. One method:
+//! end-to-end through a local [`DiscoveryStreamPool`]. One method:
 //! [`discover`], which runs the full PACC exchange (HTTPS fetch of
 //! the well-known URL → DNS TXT digest verification → JSON parse) for
 //! one domain.
@@ -31,7 +31,7 @@ use crate::{
         discover::{DiscoveryPacc, DiscoveryPaccError},
         types::PaccConfig,
     },
-    shared::pool::{Stream, StreamPool},
+    shared::pool::{DiscoveryStreamPool, Stream},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -45,7 +45,7 @@ pub enum DiscoveryPaccClientStdError {
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// [`StreamPool::get`] failed (unknown scheme, factory error).
+    /// [`DiscoveryStreamPool::get`] failed (unknown scheme, factory error).
     #[error(transparent)]
     Pool(#[from] anyhow::Error),
 }
@@ -53,7 +53,7 @@ pub enum DiscoveryPaccClientStdError {
 /// Std-blocking PACC discovery client.
 pub struct DiscoveryPaccClientStd {
     dns: Url,
-    pool: StreamPool,
+    pool: DiscoveryStreamPool,
 }
 
 impl DiscoveryPaccClientStd {
@@ -70,7 +70,7 @@ impl DiscoveryPaccClientStd {
     pub fn new(dns: Url) -> Self {
         Self {
             dns,
-            pool: StreamPool::new(),
+            pool: DiscoveryStreamPool::new(),
         }
     }
 

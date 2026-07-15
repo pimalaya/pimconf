@@ -1,7 +1,7 @@
 //! # Standard, blocking RFC 6764 CalDAV/CardDAV discovery client
 //!
 //! [`DiscoveryWebdavClientStd`] pumps the RFC 6764 discovery coroutines
-//! end-to-end through a local [`StreamPool`], exposing one entry point
+//! end-to-end through a local [`DiscoveryStreamPool`], exposing one entry point
 //! per mechanism: [`discover`] (SRV records, §3), [`txt`] (the TXT
 //! `path` lookup, §4) and [`well_known`] (a single `.well-known` probe,
 //! §5), plus [`resolve`] (SRV then TXT then `.well-known`, into a
@@ -28,17 +28,17 @@ use thiserror::Error;
 use url::Url;
 
 #[cfg(feature = "stream")]
-use crate::rfc6764::{resolve::ResolveDav, well_known::WellKnown};
+use crate::rfc6764::{resolve::DiscoveryDavResolve, well_known::DiscoveryWellKnown};
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6764::{
         discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
-        resolve::ResolveDavError,
+        resolve::DiscoveryDavResolveError,
         txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
-        types::{DavService, WebdavSrvReport},
-        well_known::WellKnownError,
+        types::{DiscoveryDavService, WebdavSrvReport},
+        well_known::DiscoveryWellKnownError,
     },
-    shared::pool::{Stream, StreamPool},
+    shared::pool::{DiscoveryStreamPool, Stream},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -52,17 +52,17 @@ pub enum DiscoveryWebdavClientStdError {
     Discovery(#[from] DiscoveryWebdavSrvError),
     /// The combined `domain -> context root` resolve coroutine failed.
     #[error(transparent)]
-    Resolve(#[from] ResolveDavError),
+    Resolve(#[from] DiscoveryDavResolveError),
     /// The standalone TXT `path` lookup failed.
     #[error(transparent)]
     Txt(#[from] DiscoveryWebdavTxtError),
     /// The standalone `.well-known` probe failed.
     #[error(transparent)]
-    WellKnown(#[from] WellKnownError),
+    DiscoveryWellKnown(#[from] DiscoveryWellKnownError),
     /// Read or write against an open stream failed.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// [`StreamPool::get`] failed (unknown scheme, factory error).
+    /// [`DiscoveryStreamPool::get`] failed (unknown scheme, factory error).
     #[error(transparent)]
     Pool(#[from] anyhow::Error),
 }
@@ -70,7 +70,7 @@ pub enum DiscoveryWebdavClientStdError {
 /// Std-blocking RFC 6764 CalDAV/CardDAV discovery client.
 pub struct DiscoveryWebdavClientStd {
     dns: Url,
-    pool: StreamPool,
+    pool: DiscoveryStreamPool,
 }
 
 impl DiscoveryWebdavClientStd {
@@ -83,7 +83,7 @@ impl DiscoveryWebdavClientStd {
     pub fn new(dns: Url) -> Self {
         Self {
             dns,
-            pool: StreamPool::new(),
+            pool: DiscoveryStreamPool::new(),
         }
     }
 
@@ -124,7 +124,7 @@ impl DiscoveryWebdavClientStd {
     pub fn txt(
         &mut self,
         domain: &str,
-        service: DavService,
+        service: DiscoveryDavService,
     ) -> Result<Option<String>, DiscoveryWebdavClientStdError> {
         let qname = service.srv_qname(true, domain);
         let coroutine = DiscoveryWebdavTxt::new(qname, self.dns.clone());
@@ -140,9 +140,9 @@ impl DiscoveryWebdavClientStd {
     pub fn resolve(
         &mut self,
         domain: &str,
-        service: DavService,
+        service: DiscoveryDavService,
     ) -> Result<Url, DiscoveryWebdavClientStdError> {
-        let coroutine = ResolveDav::new(domain, service, self.dns.clone());
+        let coroutine = DiscoveryDavResolve::new(domain, service, self.dns.clone());
         self.run(coroutine)
     }
 
@@ -155,9 +155,9 @@ impl DiscoveryWebdavClientStd {
     pub fn well_known(
         &mut self,
         origin: Url,
-        service: DavService,
+        service: DiscoveryDavService,
     ) -> Result<Option<Url>, DiscoveryWebdavClientStdError> {
-        let coroutine = WellKnown::new(origin, service);
+        let coroutine = DiscoveryWellKnown::new(origin, service);
         self.run(coroutine)
     }
 

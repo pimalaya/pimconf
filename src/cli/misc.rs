@@ -18,9 +18,9 @@ use url::Url;
 
 use crate::{
     cli::common::{ServerArg, table},
-    compose::types::{Service, ServiceConfig},
-    rfc8414::OauthServerMetadata,
-    rfc9728::OauthResourceMetadata,
+    compose::types::{DiscoveryService, DiscoveryServiceConfig},
+    rfc8414::DiscoveryOauthServerMetadata,
+    rfc9728::DiscoveryOauthResourceMetadata,
 };
 
 /// Discover every service for an email address across all domains.
@@ -106,33 +106,33 @@ impl AuthCommand {
 /// rendered as its own table.
 #[derive(Serialize)]
 #[serde(transparent)]
-struct AllOutput(Vec<ServiceConfig>);
+struct AllOutput(Vec<DiscoveryServiceConfig>);
 
 impl fmt::Display for AllOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // JMAP is listed under EMAIL to avoid repeating one session
         // under every domain; the per-domain `jmap` subcommands still
         // resolve it explicitly for calendars and contacts.
-        let sections: [(&str, &[Service]); 4] = [
+        let sections: [(&str, &[DiscoveryService]); 4] = [
             (
                 "EMAIL",
                 &[
-                    Service::Imap,
-                    Service::Pop3,
-                    Service::Smtp,
-                    Service::Jmap,
-                    Service::Managesieve,
+                    DiscoveryService::Imap,
+                    DiscoveryService::Pop3,
+                    DiscoveryService::Smtp,
+                    DiscoveryService::Jmap,
+                    DiscoveryService::Managesieve,
                 ],
             ),
-            ("CALENDAR", &[Service::Caldav]),
-            ("CONTACT", &[Service::Carddav]),
-            ("FILE", &[Service::Webdav]),
+            ("CALENDAR", &[DiscoveryService::Caldav]),
+            ("CONTACT", &[DiscoveryService::Carddav]),
+            ("FILE", &[DiscoveryService::Webdav]),
         ];
 
         let mut first = true;
 
         for (label, services) in sections {
-            let configs: Vec<ServiceConfig> = self
+            let configs: Vec<DiscoveryServiceConfig> = self
                 .0
                 .iter()
                 .filter(|config| services.contains(&config.service))
@@ -184,7 +184,7 @@ impl fmt::Display for AuthOutput {
 struct ServerOutput {
     issuer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<OauthServerMetadata>,
+    metadata: Option<DiscoveryOauthServerMetadata>,
 }
 
 impl fmt::Display for ServerOutput {
@@ -231,7 +231,7 @@ impl fmt::Display for ServerOutput {
 struct ResourceOutput {
     resource: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<OauthResourceMetadata>,
+    metadata: Option<DiscoveryOauthResourceMetadata>,
 }
 
 impl fmt::Display for ResourceOutput {

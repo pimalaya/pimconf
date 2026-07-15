@@ -1,6 +1,6 @@
 //! # `.well-known/{caldav,carddav}` redirect probe (RFC 6764 §5)
 //!
-//! [`WellKnown`] sends one HTTP GET to `<origin>/.well-known/{service}`
+//! [`DiscoveryWellKnown`] sends one HTTP GET to `<origin>/.well-known/{service}`
 //! and reports the DAV context root: a 3xx redirect resolves to
 //! `Some(Location)`, any non-redirect response resolves to `None` (the
 //! probe found nothing authoritative on that origin). It reuses the
@@ -22,12 +22,12 @@ use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    rfc6764::types::DavService,
+    rfc6764::types::DiscoveryDavService,
 };
 
-/// Errors emitted by [`WellKnown`].
+/// Errors emitted by [`DiscoveryWellKnown`].
 #[derive(Debug, Error)]
-pub enum WellKnownError {
+pub enum DiscoveryWellKnownError {
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }
@@ -36,15 +36,15 @@ pub enum WellKnownError {
 /// every step so the std client routes bytes through the matching
 /// HTTPS stream. Completes with the redirect target, or `None` when the
 /// origin did not redirect.
-pub struct WellKnown {
+pub struct DiscoveryWellKnown {
     origin: Url,
     state: State,
 }
 
-impl WellKnown {
+impl DiscoveryWellKnown {
     /// Builds a probe for `service` against `origin`, a scheme + host
     /// + port root such as `https://carddav.example.com/`.
-    pub fn new(origin: Url, service: DavService) -> Self {
+    pub fn new(origin: Url, service: DiscoveryDavService) -> Self {
         let state = match Http11WellKnown::prepare_request(origin.as_str(), service.service_name())
         {
             Ok(request) => State::Probe(Http11WellKnown::new(request)),
@@ -55,14 +55,16 @@ impl WellKnown {
     }
 }
 
-impl DiscoveryCoroutine for WellKnown {
+impl DiscoveryCoroutine for DiscoveryWellKnown {
     type Yield = DiscoveryYield;
-    type Return = Result<Option<Url>, WellKnownError>;
+    type Return = Result<Option<Url>, DiscoveryWellKnownError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match &mut self.state {
             State::Failed(err) => {
-                let err = err.take().expect("WellKnown resumed after completion");
+                let err = err
+                    .take()
+                    .expect("DiscoveryWellKnown resumed after completion");
                 DiscoveryCoroutineState::Complete(Err(err))
             }
             State::Probe(probe) => match probe.resume(arg) {
@@ -100,5 +102,5 @@ impl DiscoveryCoroutine for WellKnown {
 
 enum State {
     Probe(Http11WellKnown),
-    Failed(Option<WellKnownError>),
+    Failed(Option<DiscoveryWellKnownError>),
 }

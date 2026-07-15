@@ -8,13 +8,13 @@
 //! Naming and structure mirror io-http's [`HttpCoroutine`] /
 //! [`HttpCoroutineState`] / [`HttpYield`] triad so the two crates
 //! compose without an adapter shim per call site (HTTP-side
-//! coroutines, like [`crate::shared::http::HttpGet`], simply translate
+//! coroutines, like [`crate::shared::http::DiscoveryHttpGet`], simply translate
 //! io-http's [`HttpSendYield`] into [`DiscoveryYield`]).
 //!
 //! Every io-pim-discovery coroutine yields the same [`DiscoveryYield`]
 //! shape: each yielded step carries the [`Url`] of the endpoint the
 //! coroutine wants to talk to, so the std client driver can route the
-//! bytes to the correct stream via [`crate::shared::pool::StreamPool`].
+//! bytes to the correct stream via [`crate::shared::pool::DiscoveryStreamPool`].
 //!
 //! [`HttpCoroutine`]: io_http::coroutine::HttpCoroutine
 //! [`HttpCoroutineState`]: io_http::coroutine::HttpCoroutineState
@@ -67,7 +67,7 @@ pub trait DiscoveryCoroutine {
 /// Both variants carry the [`Url`] of the endpoint the coroutine wants
 /// to talk to so the driver can route bytes to the matching stream
 /// (DNS resolver, HTTPS origin, …) via
-/// [`crate::shared::pool::StreamPool`]. Pick `type Yield = DiscoveryYield`
+/// [`crate::shared::pool::DiscoveryStreamPool`]. Pick `type Yield = DiscoveryYield`
 /// for any coroutine that only needs to read or write socket bytes.
 #[derive(Debug)]
 pub enum DiscoveryYield {

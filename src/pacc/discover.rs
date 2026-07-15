@@ -46,7 +46,7 @@ use crate::{
     pacc::types::PaccConfig,
     shared::{
         dns::{DiscoveryDnsTxt, DiscoveryDnsTxtError},
-        http::{HttpGet, HttpGetError},
+        http::{DiscoveryHttpGet, DiscoveryHttpGetError},
     },
 };
 
@@ -61,7 +61,7 @@ pub enum DiscoveryPaccError {
     Json(#[source] serde_json::Error),
 
     #[error(transparent)]
-    Http(#[from] HttpGetError),
+    Http(#[from] DiscoveryHttpGetError),
     #[error(transparent)]
     Dns(#[from] DiscoveryDnsTxtError),
 }
@@ -78,7 +78,7 @@ enum State {
 /// (fetch → digest verification → JSON parse) for a given domain.
 pub struct DiscoveryPacc {
     state: State,
-    fetch: HttpGet,
+    fetch: DiscoveryHttpGet,
     verify: DiscoveryDnsTxt,
     raw_body: Vec<u8>,
 }
@@ -102,7 +102,7 @@ impl DiscoveryPacc {
 
         Ok(Self {
             state: State::Get,
-            fetch: HttpGet::new(url),
+            fetch: DiscoveryHttpGet::new(url),
             verify: DiscoveryDnsTxt::new(qname, resolver),
             raw_body: Vec::new(),
         })
