@@ -144,14 +144,8 @@ impl DiscoveryCoroutine for DiscoveryPacc {
                         for record in records {
                             let mut config = Vec::new();
 
-                            // TODO: restore when the domain new API
-                            // is released:
-                            //
-                            // for data in record.rdata.iter() {
-                            //     config.extend_from_slice(&data.octets);
-                            // }
-                            for data in record.data().iter() {
-                                config.extend_from_slice(data);
+                            for data in record.rdata.iter() {
+                                config.extend_from_slice(&data.octets);
                             }
 
                             let Ok(config) = str::from_utf8(&config) else {

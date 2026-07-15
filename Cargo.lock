@@ -12,12 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -397,8 +391,7 @@ dependencies = [
 [[package]]
 name = "domain"
 version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c469892dddfeff64ecfdbc64cf059c77fb0decaeccd4d5d484394bdd6312bac"
+source = "git+https://github.com/nlnetlabs/domain?rev=d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8#d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8"
 dependencies = [
  "bumpalo",
  "bytes",
@@ -406,13 +399,13 @@ dependencies = [
  "hashbrown",
  "jiff",
  "octseq",
+ "serde",
 ]
 
 [[package]]
 name = "domain-macros"
 version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fef7ef74e413e36d5364db163ca577ccb56f2f74377705d5f920ee3e1544127"
+source = "git+https://github.com/nlnetlabs/domain?rev=d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8#d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -475,6 +468,12 @@ name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "foreign-types"
@@ -546,7 +545,7 @@ version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
- "allocator-api2",
+ "foldhash",
 ]
 
 [[package]]

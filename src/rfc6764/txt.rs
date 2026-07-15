@@ -68,14 +68,8 @@ impl DiscoveryCoroutine for DiscoveryWebdavTxt {
                 for record in records {
                     let mut joined = Vec::new();
 
-                    // TODO: restore when the domain new API is
-                    // released:
-                    //
-                    // for cs in record.rdata.iter() {
-                    //     joined.extend_from_slice(&cs.octets);
-                    // }
-                    for cs in record.data().iter() {
-                        joined.extend_from_slice(cs);
+                    for cs in record.rdata.iter() {
+                        joined.extend_from_slice(&cs.octets);
                     }
 
                     let Some(value) = joined.strip_prefix(b"path=") else {

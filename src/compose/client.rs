@@ -515,7 +515,7 @@ impl ComposeClientStd {
         };
 
         for record in records {
-            let exchange = record.data().exchange().to_string();
+            let exchange = record.rdata.exchange.to_string();
 
             if let Some(provider) = Provider::from_mx(&exchange) {
                 debug!("MX record matched a fixed provider rule");

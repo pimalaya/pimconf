@@ -65,9 +65,7 @@ env_logger = "0.11"
 anyhow = { version = "1", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 clap = { version = "4.4", features = ["derive", "wrap_help"], optional = true }
-# TODO: restore when the domain new API is released:
-# domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
-domain = { version = "0.12", default-features = false, features = ["alloc", "std"] }
+domain = { version = "0.12", default-features = false, features = ["alloc", "std", "unstable-new"] }
 io-http = { version = "0.2", default-features = false, optional = true }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.0.2", default-features = false, optional = true }
@@ -87,5 +85,5 @@ resolv-conf = { version = "0.7", optional = true }
 ipconfig = { version = "0.3", optional = true }
 
 [patch.crates-io]
-# TODO: restore when the domain new API is released:
-# domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
+# TODO: drop the patch once the domain new API is released on crates.io.
+domain = { git = "https://github.com/nlnetlabs/domain", rev = "d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8" }

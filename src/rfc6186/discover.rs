@@ -19,14 +19,6 @@ use alloc::{
     string::{String, ToString},
 };
 
-// TODO: restore when the domain new API is released:
-// use domain::new::{
-//     base::{
-//         Record,
-//         name::{NameBuf, RevNameBuf},
-//     },
-//     rdata::Srv,
-// };
 use thiserror::Error;
 use url::Url;
 
@@ -143,28 +135,16 @@ impl DiscoveryCoroutine for DiscoverySrv {
     }
 }
 
-// TODO: restore when the domain new API is released:
-//
-// fn into_service(record: Record<RevNameBuf, Srv<NameBuf>>) -> SrvService {
-//     SrvService {
-//         host: record
-//             .rdata
-//             .target
-//             .to_string()
-//             .trim_end_matches('.')
-//             .to_string(),
-//         port: record.rdata.port.get(),
-//         priority: record.rdata.priority.get(),
-//         weight: record.rdata.weight.get(),
-//     }
-// }
 fn into_service(record: SrvRecord) -> SrvService {
-    let srv = record.into_data();
-
     SrvService {
-        host: srv.target().to_string().trim_end_matches('.').to_string(),
-        port: srv.port(),
-        priority: srv.priority(),
-        weight: srv.weight(),
+        host: record
+            .rdata
+            .name
+            .to_string()
+            .trim_end_matches('.')
+            .to_string(),
+        port: record.rdata.port.get(),
+        priority: record.rdata.priority.get(),
+        weight: record.rdata.weight.get(),
     }
 }

@@ -17,53 +17,34 @@ use alloc::{
     vec::Vec,
 };
 
-// TODO: restore when the domain new API is released:
-// use domain::new::{
-//     base::{
-//         HeaderFlags, MessageItem, QClass, QType, Question, Record,
-//         build::{MessageBuildError, MessageBuilder},
-//         name::{NameBuf, NameCompressor, NameParseError, RevNameBuf},
-//         parse::MessageParser,
-//         wire::{AsBytes, U16},
-//     },
-//     rdata::{Mx, RecordData},
-// };
-use domain::{
+use domain::new::{
     base::{
-        Message, MessageBuilder, Record, Rtype,
-        message_builder::PushError,
-        name::{FlattenInto, FromStrError, Name},
+        HeaderFlags, MessageItem, QClass, QType, Question, Record,
+        build::{MessageBuildError, MessageBuilder},
+        name::{NameBuf, NameCompressor, NameParseError, RevNameBuf},
+        parse::MessageParser,
+        wire::{AsBytes, U16},
     },
-    rdata::Mx,
+    rdata::{Mx, RecordData},
 };
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::dns::{DnsExchange, DnsExchangeError},
+    shared::dns::{DNS_QUERY_BUF_SIZE, DnsExchange, DnsExchangeError},
 };
 
-// TODO: restore when the domain new API is released, together with
-// the fixed-size query buffer it bounds:
-//
-// const QUERY_BUF_SIZE: usize = 4 * 1024;
-
 /// Owned DNS MX answer record returned by [`DiscoveryDnsMx`].
-// TODO: point back to the domain new API record type (RevNameBuf,
-// NameBuf) when released.
-pub type MxRecord = Record<Name<Vec<u8>>, Mx<Name<Vec<u8>>>>;
+pub type MxRecord = Record<RevNameBuf, Mx<NameBuf>>;
 
 /// Errors that can occur during a single DNS MX exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryDnsMxError {
-    // TODO: restore when the domain new API is released:
-    // InvalidDomain(#[source] NameParseError, String),
-    // QueryTooLarge(#[source] MessageBuildError),
     #[error("DNS MX domain `{1}` is not a valid name")]
-    InvalidDomain(#[source] FromStrError, String),
-    #[error("DNS MX query could not be built")]
-    QueryTooLarge(#[source] PushError),
+    InvalidDomain(#[source] NameParseError, String),
+    #[error("DNS MX query did not fit in the {DNS_QUERY_BUF_SIZE}-byte buffer")]
+    QueryTooLarge(#[source] MessageBuildError),
     #[error("DNS MX response could not be parsed")]
     InvalidResponse(String),
     #[error("DNS MX stream reached EOF before a full response")]
@@ -116,27 +97,7 @@ impl DiscoveryCoroutine for DiscoveryDnsMx {
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
             State::BuildQuery => {
-                // TODO: restore when the domain new API is released:
-                //
-                // let qname = match self.domain.parse::<RevNameBuf>() { ... };
-                //
-                // let mut buf = [0u8; QUERY_BUF_SIZE];
-                // let mut compressor = NameCompressor::default();
-                // let mut builder = MessageBuilder::new(
-                //     &mut buf,
-                //     &mut compressor,
-                //     U16::new(1),
-                //     *HeaderFlags::default().set_rd(true),
-                // );
-                //
-                // let q = Question {
-                //     qname,
-                //     qtype: QType::MX,
-                //     qclass: QClass::IN,
-                // };
-                //
-                // if let Err(err) = builder.push_question(&q) { ... }
-                let qname = match self.domain.parse::<Name<Vec<u8>>>() {
+                let qname = match self.domain.parse::<RevNameBuf>() {
                     Ok(qname) => qname,
                     Err(err) => {
                         let domain = mem::take(&mut self.domain);
@@ -146,20 +107,29 @@ impl DiscoveryCoroutine for DiscoveryDnsMx {
                     }
                 };
 
-                let mut builder = MessageBuilder::new_vec();
-                builder.header_mut().set_id(1);
-                builder.header_mut().set_rd(true);
+                let mut buf = vec![0u8; DNS_QUERY_BUF_SIZE];
+                let mut compressor = NameCompressor::default();
+                let mut builder = MessageBuilder::new(
+                    &mut buf,
+                    &mut compressor,
+                    U16::new(1),
+                    *HeaderFlags::default().set_rd(true),
+                );
 
-                let mut question = builder.question();
+                let q = Question {
+                    qname,
+                    qtype: QType::MX,
+                    qclass: QClass::IN,
+                };
 
-                if let Err(err) = question.push((&qname, Rtype::MX)) {
+                if let Err(err) = builder.push_question(&q) {
                     return DiscoveryCoroutineState::Complete(Err(
                         DiscoveryDnsMxError::QueryTooLarge(err),
                     ));
                 }
 
-                let message = question.into_message();
-                let exchange = DnsExchange::new(message.as_slice().to_vec(), self.resolver.clone());
+                let message = builder.finish().as_bytes().to_vec();
+                let exchange = DnsExchange::new(message, self.resolver.clone());
 
                 self.state = State::Exchange(exchange);
                 self.resume(None)
@@ -177,43 +147,8 @@ impl DiscoveryCoroutine for DiscoveryDnsMx {
                     DiscoveryCoroutineState::Complete(Err(DiscoveryDnsMxError::Exchange(err)))
                 }
                 DiscoveryCoroutineState::Complete(Ok(response)) => {
-                    // TODO: restore when the domain new API is
-                    // released:
-                    //
-                    // let parser = match MessageParser::new(&response) { ... };
-                    //
-                    // let mut records: Vec<Record<RevNameBuf, Mx<NameBuf>>> = Vec::new();
-                    //
-                    // for item in parser {
-                    //     let Ok(MessageItem::Answer(record)) = item else {
-                    //         continue;
-                    //     };
-                    //
-                    //     let RecordData::Mx(mx) = record.rdata else {
-                    //         continue;
-                    //     };
-                    //
-                    //     records.push(Record {
-                    //         rname: record.rname,
-                    //         rtype: record.rtype,
-                    //         rclass: record.rclass,
-                    //         ttl: record.ttl,
-                    //         rdata: mx,
-                    //     });
-                    // }
-                    //
-                    // records.sort_by(|a, b| a.rdata.cmp(&b.rdata));
-                    let message = match Message::from_octets(&response) {
-                        Ok(message) => message,
-                        Err(err) => {
-                            return DiscoveryCoroutineState::Complete(Err(
-                                DiscoveryDnsMxError::InvalidResponse(err.to_string()),
-                            ));
-                        }
-                    };
-
-                    let answer = match message.answer() {
-                        Ok(answer) => answer,
+                    let parser = match MessageParser::new(&response) {
+                        Ok(parser) => parser,
                         Err(err) => {
                             return DiscoveryCoroutineState::Complete(Err(
                                 DiscoveryDnsMxError::InvalidResponse(err.to_string()),
@@ -223,15 +158,25 @@ impl DiscoveryCoroutine for DiscoveryDnsMx {
 
                     let mut records: Vec<MxRecord> = Vec::new();
 
-                    for record in answer.limit_to::<Mx<_>>() {
-                        let Ok(record) = record else {
+                    for item in parser {
+                        let Ok(MessageItem::Answer(record)) = item else {
                             continue;
                         };
 
-                        records.push(record.flatten_into());
+                        let RecordData::Mx(mx) = record.rdata else {
+                            continue;
+                        };
+
+                        records.push(Record {
+                            rname: record.rname,
+                            rtype: record.rtype,
+                            rclass: record.rclass,
+                            ttl: record.ttl,
+                            rdata: mx,
+                        });
                     }
 
-                    records.sort_by(|a, b| a.data().cmp(b.data()));
+                    records.sort_by(|a, b| a.rdata.cmp(&b.rdata));
 
                     DiscoveryCoroutineState::Complete(Ok(records))
                 }

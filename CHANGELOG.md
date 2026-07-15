@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Switched the DNS coroutines back to the `domain` new API, pinned to the git commit that added the SRV record type (`QType::SRV` and the unsized `Srv` record data). The owned answer aliases changed accordingly: `TxtRecord` and `SrvRecord` are `Record<RevNameBuf, Box<Txt>>` / `Record<RevNameBuf, Box<Srv>>`, `MxRecord` is `Record<RevNameBuf, Mx<NameBuf>>`, all with public fields instead of accessor methods.
+
 ## [0.2.0] - 2026-07-13
 
 ### Added

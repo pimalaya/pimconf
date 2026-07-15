@@ -29,14 +29,6 @@ use std::io;
 
 use alloc::vec::Vec;
 
-// TODO: restore when the domain new API is released:
-// use domain::new::{
-//     base::{
-//         Record,
-//         name::{NameBuf, RevNameBuf},
-//     },
-//     rdata::Mx,
-// };
 use thiserror::Error;
 use url::Url;
 

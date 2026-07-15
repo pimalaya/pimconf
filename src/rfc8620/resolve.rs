@@ -105,9 +105,9 @@ impl DiscoveryCoroutine for ResolveJmap {
                     // Best record first (lowest priority, highest
                     // weight), already sorted by the SRV coroutine.
                     let best = records.into_iter().next().map(|record| {
-                        let srv = record.into_data();
-                        let host = srv.target().to_string().trim_end_matches('.').to_string();
-                        (host, srv.port())
+                        let srv = record.rdata;
+                        let host = srv.name.to_string().trim_end_matches('.').to_string();
+                        (host, srv.port.get())
                     });
                     self.probe(best)
                 }
