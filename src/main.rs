@@ -1,3 +1,15 @@
+//! # pim-discovery
+//!
+//! Command-line front-end to the io-pim-discovery library: given an
+//! email address or a domain, it runs the enabled discovery mechanisms
+//! and prints where a user's mail, calendar, contacts and files live and
+//! how to authenticate.
+//!
+//! Commands are grouped by PIM domain (email, calendar, contact, file),
+//! next to the top-level `all` and `auth` commands; the command structs
+//! live in the library's cli module, this binary only wires them to the
+//! clap parser, the logger and the printer.
+
 use std::path::PathBuf;
 
 use anyhow::Result;

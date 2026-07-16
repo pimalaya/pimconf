@@ -33,8 +33,10 @@ use crate::{
 /// Errors that can occur during a single mailconf discovery.
 #[derive(Debug, Error)]
 pub enum DiscoveryMailconfError {
+    /// The underlying DNS TXT lookup failed.
     #[error(transparent)]
     Dns(#[from] DiscoveryDnsTxtError),
+    /// The domain published no `mailconf=` TXT redirect record.
     #[error("no `mailconf=` TXT record found for the queried domain")]
     NoMailconfRecord,
 }

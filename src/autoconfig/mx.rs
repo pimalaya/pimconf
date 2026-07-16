@@ -41,14 +41,19 @@ pub type MxRecord = Record<RevNameBuf, Mx<NameBuf>>;
 /// Errors that can occur during a single DNS MX exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryDnsMxError {
+    /// The queried domain is not a valid DNS name.
     #[error("DNS MX domain `{1}` is not a valid name")]
     InvalidDomain(#[source] NameParseError, String),
+    /// The built query did not fit in the fixed query buffer.
     #[error("DNS MX query did not fit in the {DNS_QUERY_BUF_SIZE}-byte buffer")]
     QueryTooLarge(#[source] MessageBuildError),
+    /// The MX response could not be parsed.
     #[error("DNS MX response could not be parsed")]
     InvalidResponse(String),
+    /// The stream reached EOF before a full response arrived.
     #[error("DNS MX stream reached EOF before a full response")]
     Eof,
+    /// The underlying DNS message exchange failed.
     #[error("DNS MX exchange failed")]
     Exchange(#[source] DiscoveryDnsExchangeError),
 }

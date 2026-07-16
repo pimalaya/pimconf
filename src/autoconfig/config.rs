@@ -1,4 +1,4 @@
-//! # Autoconfig discovery types
+//! # Autoconfig configuration document
 //!
 //! `serde` representation of the Mozilla [Autoconfiguration] XML
 //! configuration document. Containers default to camelCase via
@@ -17,132 +17,190 @@ use alloc::{string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
+/// Root `<clientConfig>` document returned by an autoconfig endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Autoconfig {
+pub struct DiscoveryAutoconfig {
+    /// Autoconfig schema version (e.g. `"1.1"`).
     #[serde(alias = "@version")]
     pub version: String,
-    pub email_provider: EmailProvider,
+    /// Email provider settings block (`<emailProvider>`).
+    pub email_provider: DiscoveryEmailProvider,
+    /// Optional OAuth 2.0 parameters for the provider (`<oAuth2>`).
     #[serde(alias = "oAuth2")]
-    pub oauth2: Option<OAuth2Config>,
+    pub oauth2: Option<DiscoveryOAuth2Config>,
 }
 
+/// Email provider descriptor (`<emailProvider>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EmailProvider {
+pub struct DiscoveryEmailProvider {
+    /// Unique provider identifier (e.g. `"gmail.com"`).
     #[serde(alias = "@id")]
     pub id: String,
+    /// Domain names served by this provider.
     #[serde(default)]
     pub domain: Vec<String>,
+    /// Human-readable provider name shown in UI.
     pub display_name: Option<String>,
+    /// Abbreviated provider name for compact UI contexts.
     pub display_short_name: Option<String>,
+    /// Incoming mail server configurations (IMAP or POP3).
     #[serde(default)]
-    pub incoming_server: Vec<Server>,
+    pub incoming_server: Vec<DiscoveryServer>,
+    /// Outgoing mail server configurations (SMTP).
     #[serde(default)]
-    pub outgoing_server: Vec<Server>,
+    pub outgoing_server: Vec<DiscoveryServer>,
+    /// Links to provider setup documentation.
     #[serde(default)]
-    pub documentation: Vec<Documentation>,
+    pub documentation: Vec<DiscoveryDocumentation>,
 }
 
+/// Incoming or outgoing mail server entry (`<incomingServer>` /
+/// `<outgoingServer>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Server {
+pub struct DiscoveryServer {
+    /// Protocol spoken by this server (IMAP, POP3, or SMTP).
     #[serde(alias = "@type")]
-    pub r#type: ServerType,
+    pub r#type: DiscoveryServerType,
+    /// DNS hostname of the server.
     pub hostname: Option<String>,
+    /// TCP port number.
     pub port: Option<u16>,
+    /// Transport security layer to use when connecting.
     #[serde(default, deserialize_with = "text_enum::option::deserialize")]
-    pub socket_type: Option<SecurityType>,
+    pub socket_type: Option<DiscoverySecurityType>,
+    /// Login username template (may contain `%EMAILADDRESS%` etc.).
     pub username: Option<String>,
+    /// Ordered list of accepted authentication mechanisms.
     #[serde(default, deserialize_with = "text_enum::vec::deserialize")]
-    pub authentication: Vec<AuthenticationType>,
-    pub pop3: Option<Pop3Config>,
+    pub authentication: Vec<DiscoveryAuthenticationType>,
+    /// POP3-specific settings; present only when `type` is `pop3`.
+    pub pop3: Option<DiscoveryPop3Config>,
 }
 
+/// Mail protocol used by a server entry.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ServerType {
+pub enum DiscoveryServerType {
+    /// Post Office Protocol version 3.
     Pop3,
+    /// Internet Message Access Protocol.
     Imap,
+    /// Simple Mail Transfer Protocol.
     Smtp,
 }
 
+/// Transport security layer applied to a server connection.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum SecurityType {
+pub enum DiscoverySecurityType {
+    /// Unencrypted connection.
     Plain,
+    /// Upgrade to TLS via the STARTTLS command after connecting.
     #[serde(alias = "STARTTLS")]
     Starttls,
+    /// Implicit TLS from the first byte (TLS/SSL wrapper).
     #[serde(alias = "SSL")]
     Tls,
 }
 
+/// Authentication mechanism supported by a server.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AuthenticationType {
+pub enum DiscoveryAuthenticationType {
+    /// Plain-text password sent in the clear (PLAIN/LOGIN).
     #[serde(alias = "password-cleartext")]
     PasswordCleartext,
+    /// Password transmitted in an encrypted form (CRAM-MD5 etc.).
     #[serde(alias = "password-encrypted")]
     PasswordEncrypted,
+    /// Microsoft NTLM challenge-response authentication.
     #[serde(alias = "NTLM")]
     Ntlm,
+    /// Kerberos/GSSAPI authentication.
     #[serde(alias = "GSAPI")]
     GsApi,
+    /// Server authenticates the client by its IP address; no
+    /// credentials required.
     #[serde(alias = "client-IP-address")]
     ClientIPAddress,
+    /// Mutual authentication via a TLS client certificate.
     #[serde(alias = "TLS-client-cert")]
     TlsClientCert,
+    /// Bearer-token authentication via OAuth 2.0.
     #[serde(alias = "OAuth2")]
     OAuth2,
+    /// No authentication required.
     None,
 }
 
+/// POP3-specific server options (`<pop3>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Pop3Config {
+pub struct DiscoveryPop3Config {
+    /// Whether retrieved messages are kept on the server.
     pub leave_messages_on_server: Option<bool>,
+    /// Whether new-mail notifications (biff) trigger a download.
     pub download_on_biff: Option<bool>,
+    /// How many days messages are retained on the server before
+    /// deletion.
     pub days_to_leave_messages_on_server: Option<u64>,
-    pub check_interval: Option<CheckInterval>,
+    /// Periodic polling interval for new mail.
+    pub check_interval: Option<DiscoveryCheckInterval>,
 }
 
+/// Mail-check polling interval (`<checkInterval>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CheckInterval {
+pub struct DiscoveryCheckInterval {
+    /// Polling frequency in minutes.
     #[serde(alias = "@minutes")]
     pub minutes: Option<u64>,
 }
 
+/// Link to provider setup documentation (`<documentation>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Documentation {
+pub struct DiscoveryDocumentation {
+    /// URL of the documentation page.
     #[serde(alias = "@url")]
     pub url: String,
+    /// Per-language descriptions of the linked page.
     #[serde(default, alias = "descr")]
-    pub descriptions: Vec<Description>,
+    pub descriptions: Vec<DiscoveryDescription>,
 }
 
+/// Localised text description of a documentation link (`<descr>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Description {
+pub struct DiscoveryDescription {
+    /// BCP 47 language tag (e.g. `"en"`, `"fr"`).
     #[serde(alias = "@lang")]
     pub lang: Option<String>,
+    /// Human-readable description text in the given language.
     #[serde(alias = "#text")]
     pub text: String,
 }
 
+/// OAuth 2.0 parameters for the provider (`<oAuth2>`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OAuth2Config {
+pub struct DiscoveryOAuth2Config {
+    /// OAuth 2.0 issuer identifier (typically the provider's domain).
     pub issuer: String,
+    /// Space-separated list of OAuth 2.0 scopes to request.
     pub scope: String,
+    /// Authorization endpoint URL.
     #[serde(alias = "authURL")]
     pub auth_url: String,
+    /// Token endpoint URL.
     #[serde(alias = "tokenURL")]
     pub token_url: String,
 }
 
-impl fmt::Display for Autoconfig {
+impl fmt::Display for DiscoveryAutoconfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let p = &self.email_provider;
 
@@ -186,12 +244,12 @@ impl fmt::Display for Autoconfig {
     }
 }
 
-impl fmt::Display for Server {
+impl fmt::Display for DiscoveryServer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let type_label = match self.r#type {
-            ServerType::Imap => "imap",
-            ServerType::Pop3 => "pop3",
-            ServerType::Smtp => "smtp",
+            DiscoveryServerType::Imap => "imap",
+            DiscoveryServerType::Pop3 => "pop3",
+            DiscoveryServerType::Smtp => "smtp",
         };
         write!(
             f,
@@ -203,9 +261,9 @@ impl fmt::Display for Server {
         }
         if let Some(sec) = &self.socket_type {
             let label = match sec {
-                SecurityType::Plain => "Plain",
-                SecurityType::Starttls => "STARTTLS",
-                SecurityType::Tls => "SSL",
+                DiscoverySecurityType::Plain => "Plain",
+                DiscoverySecurityType::Starttls => "STARTTLS",
+                DiscoverySecurityType::Tls => "SSL",
             };
             write!(f, " ({label})")?;
         }
@@ -215,14 +273,14 @@ impl fmt::Display for Server {
             f.write_str(if first { " " } else { ", " })?;
             first = false;
             f.write_str(match auth {
-                AuthenticationType::PasswordCleartext => "password-cleartext",
-                AuthenticationType::PasswordEncrypted => "password-encrypted",
-                AuthenticationType::Ntlm => "NTLM",
-                AuthenticationType::GsApi => "GSAPI",
-                AuthenticationType::ClientIPAddress => "client-IP-address",
-                AuthenticationType::TlsClientCert => "TLS-client-cert",
-                AuthenticationType::OAuth2 => "OAuth2",
-                AuthenticationType::None => "none",
+                DiscoveryAuthenticationType::PasswordCleartext => "password-cleartext",
+                DiscoveryAuthenticationType::PasswordEncrypted => "password-encrypted",
+                DiscoveryAuthenticationType::Ntlm => "NTLM",
+                DiscoveryAuthenticationType::GsApi => "GSAPI",
+                DiscoveryAuthenticationType::ClientIPAddress => "client-IP-address",
+                DiscoveryAuthenticationType::TlsClientCert => "TLS-client-cert",
+                DiscoveryAuthenticationType::OAuth2 => "OAuth2",
+                DiscoveryAuthenticationType::None => "none",
             })?;
         }
 
@@ -230,20 +288,20 @@ impl fmt::Display for Server {
     }
 }
 
-impl fmt::Display for Documentation {
+impl fmt::Display for DiscoveryDocumentation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.descriptions.first() {
-            Some(Description {
+            Some(DiscoveryDescription {
                 lang: Some(lang),
                 text,
             }) => write!(f, "{} ({lang}: {text})", self.url),
-            Some(Description { lang: None, text }) => write!(f, "{} {text}", self.url),
+            Some(DiscoveryDescription { lang: None, text }) => write!(f, "{} {text}", self.url),
             None => write!(f, "{}", self.url),
         }
     }
 }
 
-impl fmt::Display for OAuth2Config {
+impl fmt::Display for DiscoveryOAuth2Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "  {:11}{}", "Issuer", self.issuer)?;
         writeln!(f, "  {:11}{}", "Scope", self.scope)?;
@@ -259,7 +317,7 @@ impl fmt::Display for OAuth2Config {
 // serialization stays clean (`"socketType": "tls"` instead of
 // `{"#text": "tls"}`).
 mod text_enum {
-    use serde::{Deserialize, Deserializer};
+    use serde::Deserialize;
 
     #[derive(Deserialize)]
     struct Text<T> {
@@ -268,7 +326,9 @@ mod text_enum {
     }
 
     pub mod option {
-        use super::*;
+        use serde::{Deserialize, Deserializer};
+
+        use crate::autoconfig::config::text_enum::Text;
 
         pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
         where
@@ -280,8 +340,11 @@ mod text_enum {
     }
 
     pub mod vec {
-        use super::*;
         use alloc::vec::Vec;
+
+        use serde::{Deserialize, Deserializer};
+
+        use crate::autoconfig::config::text_enum::Text;
 
         pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
         where
@@ -296,7 +359,7 @@ mod text_enum {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::autoconfig::config::*;
 
     const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <clientConfig version="1.1">
@@ -349,7 +412,7 @@ mod tests {
 
     #[test]
     fn parses_full_clientconfig() {
-        let cfg: Autoconfig =
+        let cfg: DiscoveryAutoconfig =
             serde_xml_rs::from_str(SAMPLE).expect("autoconfig XML should deserialize");
 
         assert_eq!(cfg.version, "1.1");
@@ -363,25 +426,28 @@ mod tests {
         assert_eq!(p.incoming_server.len(), 2);
 
         let imap = &p.incoming_server[0];
-        assert!(matches!(imap.r#type, ServerType::Imap));
+        assert!(matches!(imap.r#type, DiscoveryServerType::Imap));
         assert_eq!(imap.hostname.as_deref(), Some("imap.example.com"));
         assert_eq!(imap.port, Some(993));
-        assert!(matches!(imap.socket_type, Some(SecurityType::Tls)));
+        assert!(matches!(imap.socket_type, Some(DiscoverySecurityType::Tls)));
         assert_eq!(imap.username.as_deref(), Some("%EMAILADDRESS%"));
         assert_eq!(imap.authentication.len(), 2);
-        assert!(matches!(imap.authentication[0], AuthenticationType::OAuth2));
+        assert!(matches!(
+            imap.authentication[0],
+            DiscoveryAuthenticationType::OAuth2
+        ));
         assert!(matches!(
             imap.authentication[1],
-            AuthenticationType::PasswordCleartext
+            DiscoveryAuthenticationType::PasswordCleartext
         ));
         assert!(imap.pop3.is_none());
 
         let pop = &p.incoming_server[1];
-        assert!(matches!(pop.r#type, ServerType::Pop3));
-        assert!(matches!(pop.socket_type, Some(SecurityType::Tls)));
+        assert!(matches!(pop.r#type, DiscoveryServerType::Pop3));
+        assert!(matches!(pop.socket_type, Some(DiscoverySecurityType::Tls)));
         assert!(matches!(
             pop.authentication[0],
-            AuthenticationType::PasswordEncrypted
+            DiscoveryAuthenticationType::PasswordEncrypted
         ));
         let pop_cfg = pop.pop3.as_ref().expect("pop3 block");
         assert_eq!(pop_cfg.leave_messages_on_server, Some(true));
@@ -394,8 +460,11 @@ mod tests {
 
         assert_eq!(p.outgoing_server.len(), 1);
         let smtp = &p.outgoing_server[0];
-        assert!(matches!(smtp.r#type, ServerType::Smtp));
-        assert!(matches!(smtp.socket_type, Some(SecurityType::Starttls)));
+        assert!(matches!(smtp.r#type, DiscoveryServerType::Smtp));
+        assert!(matches!(
+            smtp.socket_type,
+            Some(DiscoverySecurityType::Starttls)
+        ));
 
         assert_eq!(p.documentation.len(), 1);
         let doc = &p.documentation[0];
@@ -442,7 +511,7 @@ mod tests {
 </clientConfig>
 "#;
 
-        let cfg: Autoconfig = serde_xml_rs::from_str(xml).unwrap();
+        let cfg: DiscoveryAutoconfig = serde_xml_rs::from_str(xml).unwrap();
         assert!(cfg.oauth2.is_none());
         assert!(cfg.email_provider.documentation.is_empty());
         assert_eq!(cfg.email_provider.incoming_server.len(), 1);
@@ -473,18 +542,18 @@ mod tests {
 </clientConfig>
 "#;
 
-        let cfg: Autoconfig = serde_xml_rs::from_str(xml).unwrap();
+        let cfg: DiscoveryAutoconfig = serde_xml_rs::from_str(xml).unwrap();
         assert!(matches!(
             cfg.email_provider.incoming_server[0].socket_type,
-            Some(SecurityType::Starttls)
+            Some(DiscoverySecurityType::Starttls)
         ));
         assert!(matches!(
             cfg.email_provider.outgoing_server[0].socket_type,
-            Some(SecurityType::Plain)
+            Some(DiscoverySecurityType::Plain)
         ));
         assert!(matches!(
             cfg.email_provider.incoming_server[0].authentication[0],
-            AuthenticationType::None
+            DiscoveryAuthenticationType::None
         ));
     }
 }

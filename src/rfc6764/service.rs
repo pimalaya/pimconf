@@ -1,11 +1,11 @@
-//! Types shared across RFC 6764 CalDAV/CardDAV discovery (SRV records
-//! and `.well-known` URIs).
+//! CalDAV/CardDAV service model: the [`DiscoveryDavService`] selector
+//! and the [`DiscoveryWebdavSrvReport`] the RFC 6764 SRV coroutines produce.
 
 use alloc::{format, string::String};
 
 use serde::{Deserialize, Serialize};
 
-use crate::rfc6186::types::SrvService;
+use crate::rfc6186::service::DiscoverySrvService;
 
 /// CalDAV vs CardDAV: selects the SRV service labels and the
 /// `.well-known` path used by RFC 6764 discovery.
@@ -56,9 +56,15 @@ impl DiscoveryDavService {
 /// (and highest weight on ties), or `None` when that service did not
 /// publish a record on the queried domain.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct WebdavSrvReport {
-    pub caldav: Option<SrvService>,
-    pub caldavs: Option<SrvService>,
-    pub carddav: Option<SrvService>,
-    pub carddavs: Option<SrvService>,
+pub struct DiscoveryWebdavSrvReport {
+    /// Best CalDAV SRV record (`_caldav._tcp`), or `None` if absent.
+    pub caldav: Option<DiscoverySrvService>,
+    /// Best secure CalDAV SRV record (`_caldavs._tcp`), or `None` if
+    /// absent.
+    pub caldavs: Option<DiscoverySrvService>,
+    /// Best CardDAV SRV record (`_carddav._tcp`), or `None` if absent.
+    pub carddav: Option<DiscoverySrvService>,
+    /// Best secure CardDAV SRV record (`_carddavs._tcp`), or `None`
+    /// if absent.
+    pub carddavs: Option<DiscoverySrvService>,
 }

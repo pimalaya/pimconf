@@ -1,6 +1,6 @@
 //! # Stream pool
 //!
-//! Lazily-opened, URL-keyed cache of [`Stream`] streams for the
+//! Lazily-opened, URL-keyed cache of [`DiscoveryStream`] streams for the
 //! sans-I/O coroutine runtimes that talk to multiple endpoints in a
 //! single discovery cycle (PACC, autoconfig, …).
 //!
@@ -29,10 +29,10 @@ use url::Url;
 
 /// Open marker for everything the pool can store. Auto-implemented
 /// for any blocking `Read + Write`.
-pub trait Stream: Read + Write {}
-impl<T: Read + Write + ?Sized> Stream for T {}
+pub trait DiscoveryStream: Read + Write {}
+impl<T: Read + Write + ?Sized> DiscoveryStream for T {}
 
-type StreamFactory = Box<dyn FnMut(&Url) -> Result<Box<dyn Stream>>>;
+type StreamFactory = Box<dyn FnMut(&Url) -> Result<Box<dyn DiscoveryStream>>>;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct StreamPoolKey {
@@ -65,7 +65,7 @@ impl TryFrom<&Url> for StreamPoolKey {
 
 /// URL-keyed pool of lazily-opened blocking streams.
 pub struct DiscoveryStreamPool {
-    streams: HashMap<StreamPoolKey, Box<dyn Stream>>,
+    streams: HashMap<StreamPoolKey, Box<dyn DiscoveryStream>>,
     factories: HashMap<&'static str, StreamFactory>,
 }
 
@@ -107,10 +107,10 @@ impl DiscoveryStreamPool {
     pub fn with_factory<F, S>(mut self, scheme: &'static str, mut factory: F) -> Self
     where
         F: FnMut(&Url) -> Result<S> + 'static,
-        S: Stream + 'static,
+        S: DiscoveryStream + 'static,
     {
         let boxed: StreamFactory =
-            Box::new(move |url| factory(url).map(|s| Box::new(s) as Box<dyn Stream>));
+            Box::new(move |url| factory(url).map(|s| Box::new(s) as Box<dyn DiscoveryStream>));
         self.factories.insert(scheme, boxed);
         self
     }
@@ -148,7 +148,7 @@ impl DiscoveryStreamPool {
 
     /// Pre-feeds a stream for one specific URL. Bypasses the scheme
     /// factory for that URL.
-    pub fn insert(&mut self, url: &Url, stream: impl Stream + 'static) {
+    pub fn insert(&mut self, url: &Url, stream: impl DiscoveryStream + 'static) {
         if let Ok(key) = url.try_into() {
             self.streams.insert(key, Box::new(stream));
         }
@@ -157,7 +157,7 @@ impl DiscoveryStreamPool {
     /// Returns a mutable reference to the stream open on `url`,
     /// opening one via the factory registered for `url.scheme()` if
     /// the cache misses.
-    pub fn get(&mut self, url: &Url) -> Result<&mut dyn Stream> {
+    pub fn get(&mut self, url: &Url) -> Result<&mut dyn DiscoveryStream> {
         let key = url.try_into()?;
 
         if !self.streams.contains_key(&key) {

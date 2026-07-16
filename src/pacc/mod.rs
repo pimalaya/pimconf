@@ -3,4 +3,5 @@
 #[cfg(feature = "client")]
 pub mod client;
 pub mod discover;
-pub mod types;
+
+pub mod config;

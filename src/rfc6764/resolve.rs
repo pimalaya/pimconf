@@ -35,11 +35,11 @@ use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    rfc6186::types::SrvService,
+    rfc6186::service::DiscoverySrvService,
     rfc6764::{
         discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
+        service::DiscoveryDavService,
         txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
-        types::DiscoveryDavService,
         well_known::{DiscoveryWellKnown, DiscoveryWellKnownError},
     },
 };
@@ -47,14 +47,20 @@ use crate::{
 /// Errors emitted by [`DiscoveryDavResolve`].
 #[derive(Debug, Error)]
 pub enum DiscoveryDavResolveError {
+    /// One of the four RFC 6764 §3 SRV lookups failed.
     #[error(transparent)]
     Srv(#[from] DiscoveryWebdavSrvError),
+    /// The RFC 6764 §4 TXT `path` lookup failed.
     #[error(transparent)]
     Txt(#[from] DiscoveryWebdavTxtError),
+    /// The RFC 6764 §5 `.well-known` probe failed.
     #[error(transparent)]
     DiscoveryWellKnown(#[from] DiscoveryWellKnownError),
+    /// The scheme + host + port assembled from SRV records did not
+    /// form a valid URL.
     #[error("RFC 6764 resolve built an invalid origin URL `{0}`: {1}")]
     InvalidOrigin(String, #[source] url::ParseError),
+    /// Joining the TXT `path` value onto the origin URL failed.
     #[error("RFC 6764 resolve could not apply TXT path `{0}`: {1}")]
     InvalidPath(String, #[source] url::ParseError),
 }
@@ -85,8 +91,8 @@ impl DiscoveryDavResolve {
 
     fn origin(
         &self,
-        secure: Option<SrvService>,
-        plain: Option<SrvService>,
+        secure: Option<DiscoverySrvService>,
+        plain: Option<DiscoverySrvService>,
     ) -> Result<Url, DiscoveryDavResolveError> {
         let (scheme, host, port) = match (secure, plain) {
             (Some(s), _) => ("https", s.host, s.port),

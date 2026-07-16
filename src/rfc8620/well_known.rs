@@ -35,6 +35,7 @@ const MAX_HOPS: u8 = 5;
 /// Errors emitted by [`DiscoveryJmapWellKnown`].
 #[derive(Debug, Error)]
 pub enum DiscoveryJmapWellKnownError {
+    /// The underlying well-known HTTP probe failed.
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }
@@ -44,8 +45,11 @@ pub enum DiscoveryJmapWellKnownError {
 /// advertised through `WWW-Authenticate` (empty when the terminal
 /// response was a 2xx, or advertised nothing).
 #[derive(Clone, Debug)]
-pub struct JmapSessionResource {
+pub struct DiscoveryJmapSessionResource {
+    /// URL of the JMAP Session resource (RFC 8620 §2).
     pub url: Url,
+    /// Lowercased auth-scheme names from the terminal `WWW-Authenticate`
+    /// response (empty on 2xx or when no schemes were advertised).
     pub auth_schemes: Vec<String>,
 }
 
@@ -83,7 +87,7 @@ impl DiscoveryJmapWellKnown {
 
 impl DiscoveryCoroutine for DiscoveryJmapWellKnown {
     type Yield = DiscoveryYield;
-    type Return = Result<Option<JmapSessionResource>, DiscoveryJmapWellKnownError>;
+    type Return = Result<Option<DiscoveryJmapSessionResource>, DiscoveryJmapWellKnownError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.probe.resume(arg) {
@@ -116,7 +120,7 @@ impl DiscoveryCoroutine for DiscoveryJmapWellKnown {
                             "well-known jmap answered {}, session lives at {} (schemes {:?})",
                             *output.response.status, self.target, auth_schemes
                         );
-                        DiscoveryCoroutineState::Complete(Ok(Some(JmapSessionResource {
+                        DiscoveryCoroutineState::Complete(Ok(Some(DiscoveryJmapSessionResource {
                             url: self.target.clone(),
                             auth_schemes,
                         })))

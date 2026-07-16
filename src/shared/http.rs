@@ -11,7 +11,7 @@
 //!
 //! [`DiscoveryHttpGet`] sits at the io-http / io-pim-discovery boundary: it wraps
 //! io-http's [`Http11Send`] and translates its
-//! [`HttpCoroutineState`](io_http::coroutine::HttpCoroutineState)
+//! [`io_http::coroutine::HttpCoroutineState`]
 //! into the io-pim-discovery shape, tagging every yielded I/O step with
 //! the request [`Url`] so the std client can route through
 //! [`crate::shared::pool::DiscoveryStreamPool`].
@@ -35,10 +35,18 @@ use crate::coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYie
 /// Errors that can occur during a single HTTP GET exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryHttpGetError {
+    /// The server returned an unexpected non-2xx status.
     #[error("HTTP GET returned unexpected status {0}")]
     Status(u16),
+    /// The server returned an unexpected redirect.
     #[error("HTTP GET reached unexpected redirection {code} to {url}")]
-    Redirect { url: Url, code: u16 },
+    Redirect {
+        /// Location the server redirected to.
+        url: Url,
+        /// HTTP status code of the redirect response.
+        code: u16,
+    },
+    /// The underlying HTTP send failed.
     #[error(transparent)]
     Http(#[from] Http11SendError),
 }

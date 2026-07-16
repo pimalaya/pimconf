@@ -24,6 +24,7 @@
 use core::mem;
 
 use alloc::{
+    boxed::Box,
     format,
     string::{String, ToString},
 };
@@ -36,17 +37,21 @@ use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6186::srv::DiscoveryDnsSrv,
     rfc8620::well_known::{
-        DiscoveryJmapWellKnown, DiscoveryJmapWellKnownError, JmapSessionResource,
+        DiscoveryJmapSessionResource, DiscoveryJmapWellKnown, DiscoveryJmapWellKnownError,
     },
 };
 
 /// Errors emitted by [`DiscoveryJmapResolve`].
 #[derive(Debug, Error)]
 pub enum DiscoveryJmapResolveError {
+    /// An error occurred during the `.well-known/jmap` probe step.
     #[error(transparent)]
     DiscoveryWellKnown(#[from] DiscoveryJmapWellKnownError),
+    /// The SRV record yielded a host/port that produced a URL that
+    /// could not be parsed.
     #[error("RFC 8620 resolve built an invalid origin URL `{0}`: {1}")]
     InvalidOrigin(String, #[source] url::ParseError),
+    /// No JMAP session resource was found at the resolved origin.
     #[error("RFC 8620 resolve found no JMAP session on `{0}`")]
     NotFound(Url),
 }
@@ -67,7 +72,7 @@ impl DiscoveryJmapResolve {
 
         Self {
             domain,
-            state: State::Srv(srv),
+            state: State::Srv(Box::new(srv)),
         }
     }
 
@@ -85,14 +90,14 @@ impl DiscoveryJmapResolve {
         srv: Option<(String, u16)>,
     ) -> DiscoveryCoroutineState<
         DiscoveryYield,
-        Result<JmapSessionResource, DiscoveryJmapResolveError>,
+        Result<DiscoveryJmapSessionResource, DiscoveryJmapResolveError>,
     > {
         let origin = match self.origin(srv) {
             Ok(origin) => origin,
             Err(err) => return DiscoveryCoroutineState::Complete(Err(err)),
         };
 
-        let probe = DiscoveryJmapWellKnown::new(origin.clone());
+        let probe = Box::new(DiscoveryJmapWellKnown::new(origin.clone()));
         self.state = State::DiscoveryWellKnown { probe, origin };
         self.resume(None)
     }
@@ -100,7 +105,7 @@ impl DiscoveryJmapResolve {
 
 impl DiscoveryCoroutine for DiscoveryJmapResolve {
     type Yield = DiscoveryYield;
-    type Return = Result<JmapSessionResource, DiscoveryJmapResolveError>;
+    type Return = Result<DiscoveryJmapSessionResource, DiscoveryJmapResolveError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
@@ -152,9 +157,9 @@ impl DiscoveryCoroutine for DiscoveryJmapResolve {
 
 #[derive(Default)]
 enum State {
-    Srv(DiscoveryDnsSrv),
+    Srv(Box<DiscoveryDnsSrv>),
     DiscoveryWellKnown {
-        probe: DiscoveryJmapWellKnown,
+        probe: Box<DiscoveryJmapWellKnown>,
         origin: Url,
     },
     #[default]

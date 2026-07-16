@@ -22,16 +22,17 @@
 
 use std::io;
 
+use log::{debug, trace};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     pacc::{
+        config::DiscoveryPaccConfig,
         discover::{DiscoveryPacc, DiscoveryPaccError},
-        types::PaccConfig,
     },
-    shared::pool::{DiscoveryStreamPool, Stream},
+    shared::pool::{DiscoveryStream, DiscoveryStreamPool},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -79,7 +80,7 @@ impl DiscoveryPaccClientStd {
     pub fn with_factory<F, S>(mut self, scheme: &'static str, factory: F) -> Self
     where
         F: FnMut(&Url) -> anyhow::Result<S> + 'static,
-        S: Stream + 'static,
+        S: DiscoveryStream + 'static,
     {
         self.pool = self.pool.with_factory(scheme, factory);
         self
@@ -99,14 +100,24 @@ impl DiscoveryPaccClientStd {
     /// Runs the full PACC discovery for `domain`. Streams are opened
     /// on demand: HTTPS to the well-known PACC URL, plain TCP to the
     /// configured DNS resolver.
-    pub fn discover(&mut self, domain: &str) -> Result<PaccConfig, DiscoveryPaccClientStdError> {
+    pub fn discover(
+        &mut self,
+        domain: &str,
+    ) -> Result<DiscoveryPaccConfig, DiscoveryPaccClientStdError> {
+        debug!("begin PACC discovery");
+        trace!("domain: {domain}");
+
         let mut coroutine = DiscoveryPacc::new(domain, self.dns.clone())?;
         let mut buf = [0u8; READ_BUFFER_SIZE];
         let mut arg: Option<&[u8]> = None;
 
         loop {
             match coroutine.resume(arg.take()) {
-                DiscoveryCoroutineState::Complete(Ok(config)) => return Ok(config),
+                DiscoveryCoroutineState::Complete(Ok(config)) => {
+                    debug!("end of PACC discovery");
+                    trace!("{config:?}");
+                    return Ok(config);
+                }
                 DiscoveryCoroutineState::Complete(Err(err)) => return Err(err.into()),
                 DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead { url }) => {
                     let stream = self.pool.get(&url)?;

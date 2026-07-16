@@ -13,4 +13,5 @@
 pub mod client;
 pub mod collect;
 pub mod providers;
-pub mod types;
+
+pub mod config;

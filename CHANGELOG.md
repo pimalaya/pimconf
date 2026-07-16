@@ -5,11 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-07-16
 
 ### Changed
 
-- Switched the DNS coroutines back to the `domain` new API, pinned to the git commit that added the SRV record type (`QType::SRV` and the unsized `Srv` record data). The owned answer aliases changed accordingly: `TxtRecord` and `SrvRecord` are `Record<RevNameBuf, Box<Txt>>` / `Record<RevNameBuf, Box<Srv>>`, `MxRecord` is `Record<RevNameBuf, Mx<NameBuf>>`, all with public fields instead of accessor methods.
+- Renamed every public coroutine, client, error and data type to carry the strict `Discovery` prefix, aligning with the Pimalaya naming guidelines.
+
+  For example `ComposeClientStd` became `DiscoveryComposeClientStd`; `ResolveDav`, `ResolveJmap`, `ResolveOauthServer` and `ResolveOauthResource` became `DiscoveryDavResolve`, `DiscoveryJmapResolve`, `DiscoveryOauthServerResolve` and `DiscoveryOauthResourceResolve`; `WellKnown` became `DiscoveryWellKnown`; `ProbeAuth` became `DiscoveryProbeAuth`; `ConfigCollector` became `DiscoveryConfigCollector`; and the shared data types `Service`, `ServiceConfig`, `AuthMethod`, `DavService`, `OauthServerMetadata` and `OauthResourceMetadata` gained the same prefix. The wire-format schema types were prefixed too: the autoconfig XML structs (`DiscoveryAutoconfig`, `DiscoveryEmailProvider`, `DiscoveryServer`, `DiscoveryServerType`, `DiscoverySecurityType`, `DiscoveryAuthenticationType`, …), the PACC JSON structs (`DiscoveryPaccConfig`, `DiscoveryProtocols`, `DiscoveryAuthentication`, `DiscoveryProvider`, …), and `DiscoverySrvReport`, `DiscoverySrvService`, `DiscoveryWebdavSrvReport` and `DiscoveryJmapSessionResource`. The compose config model was prefixed as well (`Endpoint`, `Security`, `ConfigSource` became `DiscoveryEndpoint`, `DiscoverySecurity`, `DiscoveryConfigSource`), the stream-pool trait `Stream` became `DiscoveryStream`, and the known-provider enum `Provider` became `DiscoveryKnownProvider` (kept distinct from the PACC `DiscoveryProvider`). Only the CLI command types keep their unprefixed names.
+
+- Moved each mechanism's data types out of a `types` catch-all module into a named public module, path-visible with no re-export: the autoconfig, PACC and composed-config schemas now live in `autoconfig::config`, `pacc::config` and `compose::config`, and the SRV and DAV service types in `rfc6186::service` and `rfc6764::service` (so e.g. `autoconfig::types::EmailProvider` is now `autoconfig::config::EmailProvider`).
+
+- Switched the DNS coroutines to the `domain` 0.12.2 `unstable-new` SRV API. The owned answer aliases are now `TxtRecord` and `SrvRecord` (`Record<RevNameBuf, Box<Txt>>` / `Record<RevNameBuf, Box<Srv>>`) and `MxRecord` (`Record<RevNameBuf, Mx<NameBuf>>`), all with public fields instead of accessor methods; the git patch that pinned the unreleased revision is gone.
+
+- Bumped io-http to 0.3, pimalaya-stream to 0.1 and pimalaya-cli to 0.1.
+
+- Documented every public item and aligned the crate with the Pimalaya documentation guidelines: the src/lib.rs architecture header replaced the README include, the README dropped its inline code, and docs.rs now builds with all features.
+
+### Fixed
+
+- Boxed the oversized HTTP coroutines held by the DNS-over-HTTPS and JMAP well-known state machines, clearing the `clippy::large_enum_variant` warnings.
 
 ## [0.2.0] - 2026-07-13
 
@@ -60,6 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added CLI (requires `cli` feature).
 
-[unreleased]: https://github.com/pimalaya/io-pim-discovery/compare/v0.2.0..HEAD
+[0.3.0]: https://github.com/pimalaya/io-pim-discovery/compare/v0.2.0..v0.3.0
 [0.2.0]: https://github.com/pimalaya/io-pim-discovery/compare/v0.1.0..v0.2.0
 [0.1.0]: https://github.com/pimalaya/io-pim-discovery/compare/root..v0.1.0

@@ -25,7 +25,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use crate::{
-    autoconfig::types::Autoconfig,
+    autoconfig::config::DiscoveryAutoconfig,
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     shared::http::{DiscoveryHttpGet, DiscoveryHttpGetError},
 };
@@ -33,10 +33,13 @@ use crate::{
 /// Errors that can occur during a single ISP autoconfig HTTP exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryIspError {
+    /// The ISP autoconfig response body was not valid UTF-8.
     #[error("ISP call returned invalid UTF-8 body")]
     Utf8(#[source] FromUtf8Error),
+    /// The ISP autoconfig response body was not valid autoconfig XML.
     #[error("ISP call returned invalid XML body")]
     Xml(#[source] serde_xml_rs::Error),
+    /// The underlying HTTP GET failed.
     #[error(transparent)]
     Http(#[from] DiscoveryHttpGetError),
 }
@@ -110,7 +113,7 @@ impl DiscoveryIsp {
 
 impl DiscoveryCoroutine for DiscoveryIsp {
     type Yield = DiscoveryYield;
-    type Return = Result<Autoconfig, DiscoveryIspError>;
+    type Return = Result<DiscoveryAutoconfig, DiscoveryIspError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match self.get.resume(arg) {

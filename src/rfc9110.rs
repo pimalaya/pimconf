@@ -28,6 +28,8 @@ const MAX_HOPS: u8 = 5;
 /// Errors emitted by [`DiscoveryProbeAuth`].
 #[derive(Debug, Error)]
 pub enum DiscoveryProbeAuthError {
+    /// An HTTP-level error occurred while sending or receiving the
+    /// probe request.
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }

@@ -73,8 +73,16 @@ pub trait DiscoveryCoroutine {
 pub enum DiscoveryYield {
     /// Driver should read more bytes from the stream open on `url`
     /// and feed them back on the next resume.
-    WantsRead { url: Url },
+    WantsRead {
+        /// Target endpoint whose stream the driver should read from.
+        url: Url,
+    },
     /// Driver should write `bytes` to the stream open on `url`; the
     /// next resume typically takes `None`.
-    WantsWrite { url: Url, bytes: Vec<u8> },
+    WantsWrite {
+        /// Target endpoint whose stream the driver should write to.
+        url: Url,
+        /// Bytes to write to the stream.
+        bytes: Vec<u8>,
+    },
 }

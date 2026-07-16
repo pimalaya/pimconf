@@ -1,4 +1,4 @@
-//! # PACC discovery types
+//! # PACC configuration document
 //!
 //! `serde` representation of the JSON configuration document defined
 //! by [draft-ietf-mailmaint-pacc-02]. Containers default to camelCase
@@ -14,101 +14,146 @@ use alloc::{string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
+/// Top-level PACC configuration document fetched from the well-known
+/// URL and verified against the DNS digest.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaccConfig {
-    pub protocols: Protocols,
-    pub authentication: Authentication,
-    pub info: Info,
+pub struct DiscoveryPaccConfig {
+    /// Protocol endpoints advertised by this provider.
+    pub protocols: DiscoveryProtocols,
+    /// Authentication methods supported by this provider.
+    pub authentication: DiscoveryAuthentication,
+    /// Human-readable provider metadata and support links.
+    pub info: DiscoveryInfo,
 }
 
+/// Set of protocol endpoints the provider supports; absent fields mean
+/// the protocol is not offered.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Protocols {
+pub struct DiscoveryProtocols {
+    /// JMAP service base URL (RFC 8620).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub jmap: Option<HttpProtocol>,
+    pub jmap: Option<DiscoveryHttpProtocol>,
+    /// CalDAV service URL (RFC 4791).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub caldav: Option<HttpProtocol>,
+    pub caldav: Option<DiscoveryHttpProtocol>,
+    /// CardDAV service URL (RFC 6352).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub carddav: Option<HttpProtocol>,
+    pub carddav: Option<DiscoveryHttpProtocol>,
+    /// Generic WebDAV service URL.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webdav: Option<HttpProtocol>,
+    pub webdav: Option<DiscoveryHttpProtocol>,
+    /// IMAP server hostname (RFC 9051).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub imap: Option<TextProtocol>,
+    pub imap: Option<DiscoveryTextProtocol>,
+    /// POP3 server hostname (RFC 1939).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pop3: Option<TextProtocol>,
+    pub pop3: Option<DiscoveryTextProtocol>,
+    /// SMTP submission hostname (RFC 6409).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub smtp: Option<TextProtocol>,
+    pub smtp: Option<DiscoveryTextProtocol>,
+    /// ManageSieve server hostname (RFC 5804).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub managesieve: Option<TextProtocol>,
+    pub managesieve: Option<DiscoveryTextProtocol>,
 }
 
+/// Endpoint descriptor for an HTTP-based protocol (JMAP, CalDAV,
+/// CardDAV, WebDAV).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HttpProtocol {
+pub struct DiscoveryHttpProtocol {
+    /// Absolute HTTPS base URL for the service.
     pub url: String,
 }
 
+/// Endpoint descriptor for a text-based protocol (IMAP, POP3, SMTP,
+/// ManageSieve).
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TextProtocol {
+pub struct DiscoveryTextProtocol {
+    /// Hostname of the server.
     pub host: String,
 }
 
+/// Authentication methods supported by the provider.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Authentication {
+pub struct DiscoveryAuthentication {
+    /// OAuth 2.0 public-client configuration; present when the
+    /// provider supports OAuth without a client secret (wire key:
+    /// `oauth-public`).
     #[serde(rename = "oauth-public")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub oauth_public: Option<OauthPublic>,
+    pub oauth_public: Option<DiscoveryOauthPublic>,
+    /// `true` when the provider accepts password-based authentication.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<bool>,
 }
 
+/// OAuth 2.0 public-client parameters; the client fetches server
+/// metadata from the issuer URL per RFC 8414.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OauthPublic {
+pub struct DiscoveryOauthPublic {
+    /// OAuth 2.0 issuer URL used to discover the authorization server
+    /// metadata (RFC 8414 / RFC 9728).
     pub issuer: String,
 }
 
+/// Human-readable provider metadata included in the PACC document.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Info {
-    pub provider: Provider,
+pub struct DiscoveryInfo {
+    /// Identity and branding information for the provider.
+    pub provider: DiscoveryProvider,
+    /// Optional support and documentation links.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub help: Option<Help>,
+    pub help: Option<DiscoveryHelp>,
 }
 
+/// Identity and branding of the email/PIM service provider.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Provider {
+pub struct DiscoveryProvider {
+    /// Full display name of the provider (e.g. `"Example Mail"`).
     pub name: String,
+    /// Abbreviated name suitable for constrained UI space.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_name: Option<String>,
+    /// One or more provider logo images at different sizes or formats.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub logo: Option<Vec<Logo>>,
+    pub logo: Option<Vec<DiscoveryLogo>>,
 }
 
+/// A single provider logo image.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Logo {
+pub struct DiscoveryLogo {
+    /// Absolute URL pointing to the logo image resource.
     pub url: String,
+    /// MIME type of the image (wire key: `content-type`); e.g.
+    /// `"image/png"` or `"image/svg+xml"`.
     #[serde(rename = "content-type")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
 }
 
+/// Support and documentation resources offered by the provider.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Help {
+pub struct DiscoveryHelp {
+    /// URL of the end-user documentation page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub documentation: Option<String>,
+    /// URL of the developer or API documentation page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub developer: Option<String>,
+    /// One or more contact URLs or email addresses for support.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contact: Option<Vec<String>>,
 }
 
-impl fmt::Display for PaccConfig {
+impl fmt::Display for DiscoveryPaccConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let provider = &self.info.provider;
         match &provider.short_name {

@@ -4,7 +4,7 @@
 //! (`_imap._tcp.<domain>`, `_imaps._tcp.<domain>`,
 //! `_submission._tcp.<domain>`) in series, picks the best record per
 //! service (lowest priority, highest weight on ties; already sorted
-//! by [`DiscoveryDnsSrv`]), and yields a single [`SrvReport`] when
+//! by [`DiscoveryDnsSrv`]), and yields a single [`DiscoverySrvReport`] when
 //! all three steps have completed.
 //!
 //! A per-service DNS failure (`InvalidQname`, `QueryTooLarge`,
@@ -25,18 +25,21 @@ use url::Url;
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6186::{
+        service::{DiscoverySrvReport, DiscoverySrvService},
         srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError, SrvRecord},
-        types::{SrvReport, SrvService},
     },
 };
 
 /// Errors emitted by [`DiscoverySrv`].
 #[derive(Debug, Error)]
 pub enum DiscoverySrvError {
+    /// The `_imap._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_imap._tcp` failed: {0}")]
     Imap(#[source] DiscoveryDnsSrvError),
+    /// The `_imaps._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_imaps._tcp` failed: {0}")]
     Imaps(#[source] DiscoveryDnsSrvError),
+    /// The `_submission._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_submission._tcp` failed: {0}")]
     Submission(#[source] DiscoveryDnsSrvError),
 }
@@ -51,12 +54,12 @@ enum State {
 }
 
 /// I/O-free combined coroutine that runs the three RFC 6186 SRV
-/// queries and assembles their best records into a [`SrvReport`].
+/// queries and assembles their best records into a [`DiscoverySrvReport`].
 pub struct DiscoverySrv {
     state: State,
     domain: String,
     resolver: Url,
-    report: SrvReport,
+    report: DiscoverySrvReport,
 }
 
 impl DiscoverySrv {
@@ -72,14 +75,14 @@ impl DiscoverySrv {
             state: State::Imap(imap),
             domain,
             resolver,
-            report: SrvReport::default(),
+            report: DiscoverySrvReport::default(),
         }
     }
 }
 
 impl DiscoveryCoroutine for DiscoverySrv {
     type Yield = DiscoveryYield;
-    type Return = Result<SrvReport, DiscoverySrvError>;
+    type Return = Result<DiscoverySrvReport, DiscoverySrvError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
@@ -135,8 +138,8 @@ impl DiscoveryCoroutine for DiscoverySrv {
     }
 }
 
-fn into_service(record: SrvRecord) -> SrvService {
-    SrvService {
+fn into_service(record: SrvRecord) -> DiscoverySrvService {
+    DiscoverySrvService {
         host: record
             .rdata
             .name

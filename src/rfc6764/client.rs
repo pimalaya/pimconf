@@ -24,6 +24,7 @@ use std::io;
 
 use alloc::string::String;
 
+use log::{debug, trace};
 use thiserror::Error;
 use url::Url;
 
@@ -34,11 +35,11 @@ use crate::{
     rfc6764::{
         discover::{DiscoveryWebdavSrv, DiscoveryWebdavSrvError},
         resolve::DiscoveryDavResolveError,
+        service::{DiscoveryDavService, DiscoveryWebdavSrvReport},
         txt::{DiscoveryWebdavTxt, DiscoveryWebdavTxtError},
-        types::{DiscoveryDavService, WebdavSrvReport},
         well_known::DiscoveryWellKnownError,
     },
-    shared::pool::{DiscoveryStreamPool, Stream},
+    shared::pool::{DiscoveryStream, DiscoveryStreamPool},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -91,7 +92,7 @@ impl DiscoveryWebdavClientStd {
     pub fn with_factory<F, S>(mut self, scheme: &'static str, factory: F) -> Self
     where
         F: FnMut(&Url) -> anyhow::Result<S> + 'static,
-        S: Stream + 'static,
+        S: DiscoveryStream + 'static,
     {
         self.pool = self.pool.with_factory(scheme, factory);
         self
@@ -112,7 +113,10 @@ impl DiscoveryWebdavClientStd {
     pub fn discover(
         &mut self,
         domain: &str,
-    ) -> Result<WebdavSrvReport, DiscoveryWebdavClientStdError> {
+    ) -> Result<DiscoveryWebdavSrvReport, DiscoveryWebdavClientStdError> {
+        debug!("begin RFC 6764 DAV SRV discovery");
+        trace!("domain: {domain}");
+
         let coroutine = DiscoveryWebdavSrv::new(domain, self.dns.clone());
         self.run(coroutine)
     }
@@ -126,6 +130,9 @@ impl DiscoveryWebdavClientStd {
         domain: &str,
         service: DiscoveryDavService,
     ) -> Result<Option<String>, DiscoveryWebdavClientStdError> {
+        debug!("begin RFC 6764 DAV TXT path lookup");
+        trace!("domain: {domain}, service: {service:?}");
+
         let qname = service.srv_qname(true, domain);
         let coroutine = DiscoveryWebdavTxt::new(qname, self.dns.clone());
         self.run(coroutine)
@@ -142,6 +149,9 @@ impl DiscoveryWebdavClientStd {
         domain: &str,
         service: DiscoveryDavService,
     ) -> Result<Url, DiscoveryWebdavClientStdError> {
+        debug!("begin RFC 6764 DAV resolve");
+        trace!("domain: {domain}, service: {service:?}");
+
         let coroutine = DiscoveryDavResolve::new(domain, service, self.dns.clone());
         self.run(coroutine)
     }
@@ -157,6 +167,9 @@ impl DiscoveryWebdavClientStd {
         origin: Url,
         service: DiscoveryDavService,
     ) -> Result<Option<Url>, DiscoveryWebdavClientStdError> {
+        debug!("begin RFC 6764 DAV well-known probe");
+        trace!("origin: {origin}, service: {service:?}");
+
         let coroutine = DiscoveryWellKnown::new(origin, service);
         self.run(coroutine)
     }

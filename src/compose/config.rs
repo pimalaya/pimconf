@@ -1,4 +1,4 @@
-//! # Unified compose types
+//! # Discovered service configuration
 //!
 //! The compose module reduces every discovery mechanism to one common
 //! output: a list of [`DiscoveryServiceConfig`], each describing one way to
@@ -16,12 +16,14 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[cfg(feature = "autoconfig")]
-use crate::autoconfig::types::{AuthenticationType, Autoconfig, SecurityType, ServerType};
-use crate::compose::providers::Provider;
+use crate::autoconfig::config::{
+    DiscoveryAuthenticationType, DiscoveryAutoconfig, DiscoverySecurityType, DiscoveryServerType,
+};
+use crate::compose::providers::DiscoveryKnownProvider;
 #[cfg(feature = "pacc")]
-use crate::pacc::types::PaccConfig;
+use crate::pacc::config::DiscoveryPaccConfig;
 #[cfg(feature = "rfc6186")]
-use crate::rfc6186::types::{SrvReport, SrvService};
+use crate::rfc6186::service::{DiscoverySrvReport, DiscoverySrvService};
 
 /// One discovered way to use one service: where to connect, how to
 /// authenticate, and which mechanism found it.
@@ -32,7 +34,7 @@ pub struct DiscoveryServiceConfig {
     pub service: DiscoveryService,
 
     /// Where to reach the service.
-    pub endpoint: Endpoint,
+    pub endpoint: DiscoveryEndpoint,
 
     /// The login to present, when the mechanism advertises one
     /// (autoconfig placeholders already substituted).
@@ -42,7 +44,7 @@ pub struct DiscoveryServiceConfig {
     pub auth: Vec<DiscoveryAuthMethod>,
 
     /// The mechanism that produced this config.
-    pub source: ConfigSource,
+    pub source: DiscoveryConfigSource,
 }
 
 impl DiscoveryServiceConfig {
@@ -54,7 +56,7 @@ impl DiscoveryServiceConfig {
     ///
     /// [`refine_auth`]: Self::refine_auth
     pub fn probe_urls(&self) -> Vec<Url> {
-        let Endpoint::Http(raw) = &self.endpoint else {
+        let DiscoveryEndpoint::Http(raw) = &self.endpoint else {
             return Vec::new();
         };
         let Ok(url) = Url::parse(raw) else {
@@ -115,7 +117,11 @@ impl DiscoveryServiceConfig {
     /// skipped; a missing port falls back to the well-known port of
     /// the service and security combination.
     #[cfg(feature = "autoconfig")]
-    pub fn from_autoconfig(config: &Autoconfig, email: &str, source: ConfigSource) -> Vec<Self> {
+    pub fn from_autoconfig(
+        config: &DiscoveryAutoconfig,
+        email: &str,
+        source: DiscoveryConfigSource,
+    ) -> Vec<Self> {
         let provider = &config.email_provider;
         let servers = provider
             .incoming_server
@@ -130,15 +136,15 @@ impl DiscoveryServiceConfig {
             };
 
             let service = match server.r#type {
-                ServerType::Imap => DiscoveryService::Imap,
-                ServerType::Pop3 => DiscoveryService::Pop3,
-                ServerType::Smtp => DiscoveryService::Smtp,
+                DiscoveryServerType::Imap => DiscoveryService::Imap,
+                DiscoveryServerType::Pop3 => DiscoveryService::Pop3,
+                DiscoveryServerType::Smtp => DiscoveryService::Smtp,
             };
 
             let security = match server.socket_type {
-                Some(SecurityType::Tls) | None => Security::Tls,
-                Some(SecurityType::Starttls) => Security::Starttls,
-                Some(SecurityType::Plain) => Security::Plain,
+                Some(DiscoverySecurityType::Tls) | None => DiscoverySecurity::Tls,
+                Some(DiscoverySecurityType::Starttls) => DiscoverySecurity::Starttls,
+                Some(DiscoverySecurityType::Plain) => DiscoverySecurity::Plain,
             };
 
             let Some(port) = server.port.or(default_port(service, security)) else {
@@ -149,9 +155,11 @@ impl DiscoveryServiceConfig {
 
             for method in &server.authentication {
                 let method = match method {
-                    AuthenticationType::PasswordCleartext
-                    | AuthenticationType::PasswordEncrypted => DiscoveryAuthMethod::Password,
-                    AuthenticationType::OAuth2 => {
+                    DiscoveryAuthenticationType::PasswordCleartext
+                    | DiscoveryAuthenticationType::PasswordEncrypted => {
+                        DiscoveryAuthMethod::Password
+                    }
+                    DiscoveryAuthenticationType::OAuth2 => {
                         let Some(oauth) = &config.oauth2 else {
                             continue;
                         };
@@ -172,7 +180,7 @@ impl DiscoveryServiceConfig {
 
             configs.push(Self {
                 service,
-                endpoint: Endpoint::Tcp {
+                endpoint: DiscoveryEndpoint::Tcp {
                     host: substitute(hostname, email),
                     port,
                     security,
@@ -190,7 +198,7 @@ impl DiscoveryServiceConfig {
     /// protocol. PACC mandates implicit TLS for the text protocols,
     /// so their configs use the well-known implicit-TLS ports.
     #[cfg(feature = "pacc")]
-    pub fn from_pacc(config: &PaccConfig) -> Vec<Self> {
+    pub fn from_pacc(config: &DiscoveryPaccConfig) -> Vec<Self> {
         let mut auth = Vec::new();
 
         if let Some(oauth) = &config.authentication.oauth_public {
@@ -218,14 +226,14 @@ impl DiscoveryServiceConfig {
 
             configs.push(Self {
                 service,
-                endpoint: Endpoint::Tcp {
+                endpoint: DiscoveryEndpoint::Tcp {
                     host: protocol.host.clone(),
                     port,
-                    security: Security::Tls,
+                    security: DiscoverySecurity::Tls,
                 },
                 username: None,
                 auth: auth.clone(),
-                source: ConfigSource::Pacc,
+                source: DiscoveryConfigSource::Pacc,
             });
         }
 
@@ -243,10 +251,10 @@ impl DiscoveryServiceConfig {
 
             configs.push(Self {
                 service,
-                endpoint: Endpoint::Http(protocol.url.clone()),
+                endpoint: DiscoveryEndpoint::Http(protocol.url.clone()),
                 username: None,
                 auth: auth.clone(),
-                source: ConfigSource::Pacc,
+                source: DiscoveryConfigSource::Pacc,
             });
         }
 
@@ -258,14 +266,22 @@ impl DiscoveryServiceConfig {
     /// assumed; `_imaps` maps to implicit TLS, `_imap` and
     /// `_submission` to STARTTLS.
     #[cfg(feature = "rfc6186")]
-    pub fn from_srv(report: &SrvReport) -> Vec<Self> {
+    pub fn from_srv(report: &DiscoverySrvReport) -> Vec<Self> {
         let services = [
-            (DiscoveryService::Imap, &report.imaps, Security::Tls),
-            (DiscoveryService::Imap, &report.imap, Security::Starttls),
+            (
+                DiscoveryService::Imap,
+                &report.imaps,
+                DiscoverySecurity::Tls,
+            ),
+            (
+                DiscoveryService::Imap,
+                &report.imap,
+                DiscoverySecurity::Starttls,
+            ),
             (
                 DiscoveryService::Smtp,
                 &report.submission,
-                Security::Starttls,
+                DiscoverySecurity::Starttls,
             ),
         ];
 
@@ -275,7 +291,7 @@ impl DiscoveryServiceConfig {
             // NOTE: an SRV target of `.` means the service is
             // explicitly not available (RFC 2782); the target comes
             // in with its trailing dot already trimmed.
-            let Some(SrvService { host, port, .. }) = record else {
+            let Some(DiscoverySrvService { host, port, .. }) = record else {
                 continue;
             };
             if host.is_empty() {
@@ -284,14 +300,14 @@ impl DiscoveryServiceConfig {
 
             configs.push(Self {
                 service,
-                endpoint: Endpoint::Tcp {
+                endpoint: DiscoveryEndpoint::Tcp {
                     host: host.clone(),
                     port: *port,
                     security,
                 },
                 username: None,
                 auth: vec![DiscoveryAuthMethod::Password],
-                source: ConfigSource::Srv,
+                source: DiscoveryConfigSource::Srv,
             });
         }
 
@@ -304,10 +320,10 @@ impl DiscoveryServiceConfig {
     pub fn from_dav(service: DiscoveryService, url: impl ToString) -> Self {
         Self {
             service,
-            endpoint: Endpoint::Http(url.to_string()),
+            endpoint: DiscoveryEndpoint::Http(url.to_string()),
             username: None,
             auth: vec![DiscoveryAuthMethod::Password],
-            source: ConfigSource::Dav,
+            source: DiscoveryConfigSource::Dav,
         }
     }
 
@@ -336,10 +352,10 @@ impl DiscoveryServiceConfig {
 
         Self {
             service: DiscoveryService::Jmap,
-            endpoint: Endpoint::Http(url.to_string()),
+            endpoint: DiscoveryEndpoint::Http(url.to_string()),
             username: None,
             auth,
-            source: ConfigSource::Jmap,
+            source: DiscoveryConfigSource::Jmap,
         }
     }
 }
@@ -348,31 +364,42 @@ impl DiscoveryServiceConfig {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DiscoveryService {
+    /// IMAP mailbox access (RFC 9051).
     Imap,
+    /// POP3 mailbox access (RFC 1939).
     Pop3,
+    /// SMTP mail submission (RFC 5321).
     Smtp,
+    /// JMAP (RFC 8620).
     Jmap,
+    /// CalDAV calendar access (RFC 4791).
     Caldav,
+    /// CardDAV contact access (RFC 6352).
     Carddav,
+    /// Generic WebDAV (RFC 4918).
     Webdav,
+    /// ManageSieve server-side filtering (RFC 5804).
     Managesieve,
 }
 
 /// Where to reach a service.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum Endpoint {
+pub enum DiscoveryEndpoint {
     /// Text protocol endpoint (IMAP, POP3, SMTP, ManageSieve).
     Tcp {
+        /// Hostname or IP address of the server.
         host: String,
+        /// TCP port number.
         port: u16,
-        security: Security,
+        /// Transport security negotiation mode.
+        security: DiscoverySecurity,
     },
     /// HTTP endpoint (JMAP, CalDAV, CardDAV, WebDAV).
     Http(String),
 }
 
-impl Endpoint {
+impl DiscoveryEndpoint {
     /// Reports whether two endpoints reach the same service: byte
     /// equality, or normalized-URL equality for HTTP endpoints, so
     /// mechanisms disagreeing only on a trailing slash or an explicit
@@ -416,21 +443,22 @@ impl Endpoint {
 mod tests {
     use alloc::{string::ToString, vec};
 
-    use crate::compose::types::{
-        ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint,
+    use crate::compose::config::{
+        DiscoveryAuthMethod, DiscoveryConfigSource, DiscoveryEndpoint, DiscoveryService,
+        DiscoveryServiceConfig,
     };
 
     #[test]
     fn probed_schemes_beat_account_level_claims() {
         let mut config = DiscoveryServiceConfig {
             service: DiscoveryService::Jmap,
-            endpoint: Endpoint::Http("https://api.example.com/jmap/session".to_string()),
+            endpoint: DiscoveryEndpoint::Http("https://api.example.com/jmap/session".to_string()),
             username: None,
             auth: vec![
                 DiscoveryAuthMethod::OauthIssuer("https://api.example.com".to_string()),
                 DiscoveryAuthMethod::Password,
             ],
-            source: ConfigSource::Pacc,
+            source: DiscoveryConfigSource::Pacc,
         };
 
         // The endpoint advertises bearer only: the account-level
@@ -451,10 +479,10 @@ mod tests {
 
     #[test]
     fn http_endpoints_compare_normalized() {
-        let bare = Endpoint::Http("https://carddav.example.com".to_string());
-        let slash = Endpoint::Http("https://carddav.example.com/".to_string());
-        let port = Endpoint::Http("https://carddav.example.com:443/".to_string());
-        let other = Endpoint::Http("https://carddav.example.com/dav".to_string());
+        let bare = DiscoveryEndpoint::Http("https://carddav.example.com".to_string());
+        let slash = DiscoveryEndpoint::Http("https://carddav.example.com/".to_string());
+        let port = DiscoveryEndpoint::Http("https://carddav.example.com:443/".to_string());
+        let other = DiscoveryEndpoint::Http("https://carddav.example.com/dav".to_string());
 
         assert!(bare.equivalent(&slash));
         assert!(bare.equivalent(&port));
@@ -463,10 +491,10 @@ mod tests {
 
     #[test]
     fn subdomain_marks_a_rotated_backend() {
-        let parent = Endpoint::Http("https://carddav.example.com".to_string());
-        let shard = Endpoint::Http("https://d063023.carddav.example.com/dav".to_string());
-        let sibling = Endpoint::Http("https://caldav.example.com".to_string());
-        let lookalike = Endpoint::Http("https://evilcarddav.example.com".to_string());
+        let parent = DiscoveryEndpoint::Http("https://carddav.example.com".to_string());
+        let shard = DiscoveryEndpoint::Http("https://d063023.carddav.example.com/dav".to_string());
+        let sibling = DiscoveryEndpoint::Http("https://caldav.example.com".to_string());
+        let lookalike = DiscoveryEndpoint::Http("https://evilcarddav.example.com".to_string());
 
         assert!(shard.subdomain_of(&parent));
         assert!(!parent.subdomain_of(&shard));
@@ -478,9 +506,12 @@ mod tests {
 /// Transport security of a TCP service endpoint.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum Security {
+pub enum DiscoverySecurity {
+    /// Unencrypted connection.
     Plain,
+    /// Opportunistic TLS via the STARTTLS command.
     Starttls,
+    /// Implicit TLS from the first byte.
     Tls,
 }
 
@@ -496,15 +527,21 @@ pub enum DiscoveryAuthMethod {
 
     /// OAuth 2.0 authorization code grant (RFC 6749 §4.1).
     OauthAuthorizationCodeGrant {
+        /// URL of the authorization server's authorization endpoint.
         authorization_endpoint: String,
+        /// URL of the authorization server's token endpoint.
         token_endpoint: String,
+        /// Space-delimited set of requested scopes, if known.
         scope: Option<String>,
     },
 
     /// OAuth 2.0 device authorization grant (RFC 8628).
     OauthDeviceAuthorizationGrant {
+        /// URL of the device authorization endpoint.
         device_authorization_endpoint: String,
+        /// URL of the authorization server's token endpoint.
         token_endpoint: String,
+        /// Space-delimited set of requested scopes, if known.
         scope: Option<String>,
     },
 
@@ -517,9 +554,9 @@ pub enum DiscoveryAuthMethod {
 /// The mechanism that produced a config.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ConfigSource {
+pub enum DiscoveryConfigSource {
     /// A fixed provider rule (domain or MX match).
-    Provider(Provider),
+    Provider(DiscoveryKnownProvider),
     /// PACC discovery.
     Pacc,
     /// The autoconfig ISP main URL.
@@ -553,15 +590,15 @@ fn substitute(value: &str, email: &str) -> String {
 /// Returns the well-known port for a service and security
 /// combination, used when a mechanism omits the port.
 #[cfg(feature = "autoconfig")]
-fn default_port(service: DiscoveryService, security: Security) -> Option<u16> {
+fn default_port(service: DiscoveryService, security: DiscoverySecurity) -> Option<u16> {
     match (service, security) {
-        (DiscoveryService::Imap, Security::Tls) => Some(993),
+        (DiscoveryService::Imap, DiscoverySecurity::Tls) => Some(993),
         (DiscoveryService::Imap, _) => Some(143),
-        (DiscoveryService::Pop3, Security::Tls) => Some(995),
+        (DiscoveryService::Pop3, DiscoverySecurity::Tls) => Some(995),
         (DiscoveryService::Pop3, _) => Some(110),
-        (DiscoveryService::Smtp, Security::Tls) => Some(465),
-        (DiscoveryService::Smtp, Security::Starttls) => Some(587),
-        (DiscoveryService::Smtp, Security::Plain) => Some(25),
+        (DiscoveryService::Smtp, DiscoverySecurity::Tls) => Some(465),
+        (DiscoveryService::Smtp, DiscoverySecurity::Starttls) => Some(587),
+        (DiscoveryService::Smtp, DiscoverySecurity::Plain) => Some(25),
         (DiscoveryService::Managesieve, _) => Some(4190),
         _ => None,
     }

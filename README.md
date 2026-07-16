@@ -28,7 +28,7 @@ This project is composed of 3 feature-gated layers:
 - **JMAP discovery**: resolve a domain to its JMAP session URL through DNS SRV and the well-known session probe.
 - **Authentication discovery**: probe a URL's authentication schemes and fetch a provider's OAuth 2.0 authorization-server and protected-resource metadata to learn where and how to obtain tokens.
 - **Unified compose**: from a single email address, chain the known-provider rules and every enabled mechanism into one ranked list of service configurations, either collecting all of them or stopping at the first match.
-- **DNS over HTTPS**: every DNS lookup accepts an `https` resolver so discovery works on networks that block plain DNS.
+- **DNS over HTTPS**: every DNS lookup accepts an HTTPS resolver so discovery works on networks that block plain DNS.
 - **JSON output**: machine-readable results from the CLI with a single flag.
 - **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
@@ -42,11 +42,11 @@ This project is composed of 3 feature-gated layers:
 
 | Spec | What is covered |
 |------|-----------------|
-| [Autoconfig] | Mozilla Thunderbird autoconfiguration: ISP main and well-known lookups, ISPDB, DNS MX retry and DNS TXT `mailconf` redirect (requires `autoconfig`) |
-| [PACC] | Provider-authenticated client configuration: well-known JSON fetch with SHA-256 digest verification against the `_ua-auto-config` TXT record (requires `pacc`) |
-| [6186] | DNS SRV mail discovery: `_imap`, `_imaps`, `_submission` assembled into one report (requires `rfc6186`) |
+| [Autoconfig] | Mozilla Thunderbird autoconfiguration: ISP main and well-known lookups, ISPDB, DNS MX retry and the DNS TXT mailconf redirect (requires `autoconfig`) |
+| [PACC] | Provider-authenticated client configuration: well-known JSON fetch with SHA-256 digest verification against the ua-auto-config TXT record (requires `pacc`) |
+| [6186] | DNS SRV mail discovery: imap, imaps and submission records assembled into one report (requires `rfc6186`) |
 | [6764] | CalDAV and CardDAV discovery: DNS SRV, DNS TXT context and well-known probe, chained into a context-root resolve (requires `rfc6764`) |
-| [8484] | DNS over HTTPS: every lookup accepts an `https://…/dns-query` resolver next to plain `tcp://host:port` |
+| [8484] | DNS over HTTPS: every lookup accepts an HTTPS dns-query resolver next to plain DNS over TCP |
 | [8620] | JMAP autodiscovery: DNS SRV origin lookup and well-known session probe, chained into a session-URL resolve (requires `rfc8620`) |
 | [8414] | OAuth 2.0 authorization server metadata: resolve an issuer into its authorization, token and registration endpoints (requires `rfc8414`) |
 | [9728] | OAuth 2.0 protected resource metadata: resolve a resource into the authorization servers that can issue tokens for it (requires `rfc9728`) |
@@ -62,7 +62,7 @@ This project is composed of 3 feature-gated layers:
 
 ## Installation
 
-The CLI binary `pim-discovery` has not been officially released yet. Pre-built binaries from the `master` branch are attached to the [releases](https://github.com/pimalaya/io-pim-discovery/actions/workflows/releases.yml) workflow, under its *Artifacts* section, built with the default features plus `cli`.
+The CLI binary pim-discovery has not been officially released yet. Pre-built binaries from the master branch are attached to the [releases](https://github.com/pimalaya/io-pim-discovery/actions/workflows/releases.yml) workflow, under its *Artifacts* section, built with the default features plus the cli feature.
 
 Install from [crates.io](https://crates.io/crates/io-pim-discovery) with cargo:
 
@@ -76,11 +76,11 @@ Or with [Nix](https://nixos.wiki/wiki/Flakes):
 nix profile install github:pimalaya/io-pim-discovery
 ```
 
-To use io-pim-discovery as a library, add it to your `Cargo.toml` and pick the mechanisms you need; the API is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
+To use io-pim-discovery as a library, add it to your Cargo.toml and pick the mechanisms you need; the API is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
 
 ## Usage
 
-The CLI is organised by PIM domain (`email`, `calendar`, `contact`, `file`), plus `all` and `auth`; each mechanism is exposed independently and the source column tells the rows apart. A few real-world invocations:
+The CLI is organised by PIM domain (email, calendar, contact, file), plus all and auth; each mechanism is exposed independently and the source column tells the rows apart. A few real-world invocations:
 
 ```sh
 pim-discovery all user@fastmail.com
@@ -90,7 +90,7 @@ pim-discovery auth server https://api.fastmail.com
 pim-discovery --json all user@fastmail.com
 ```
 
-Run `pim-discovery --help` for the full command tree, flags and TLS options. The library API, including every coroutine and client, is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
+Run pim-discovery --help for the full command tree, flags and TLS options. The library API, including every coroutine and client, is documented on [docs.rs](https://docs.rs/io-pim-discovery/latest/io_pim_discovery).
 
 ## FAQ
 
@@ -109,7 +109,7 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 15/07/2026
+- **Last reviewed**: 16/07/2026
 
 ## License
 

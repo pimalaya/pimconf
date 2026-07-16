@@ -1,5 +1,5 @@
 [sources]
-allow-org.github = ["pimalaya", "nlnetlabs"]
+allow-org.github = ["pimalaya"]
 unknown-registry = "deny"
 unknown-git = "deny"
 

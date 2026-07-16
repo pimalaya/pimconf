@@ -32,6 +32,7 @@ use crate::{
 /// Errors emitted by [`DiscoveryWebdavTxt`].
 #[derive(Debug, Error)]
 pub enum DiscoveryWebdavTxtError {
+    /// The underlying DNS TXT exchange failed.
     #[error(transparent)]
     Dns(#[from] DiscoveryDnsTxtError),
 }

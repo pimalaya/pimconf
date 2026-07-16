@@ -15,6 +15,7 @@
 
 use std::io;
 
+use log::{debug, trace};
 use thiserror::Error;
 use url::Url;
 
@@ -22,9 +23,9 @@ use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     rfc6186::{
         discover::{DiscoverySrv, DiscoverySrvError},
-        types::SrvReport,
+        service::DiscoverySrvReport,
     },
-    shared::pool::{DiscoveryStreamPool, Stream},
+    shared::pool::{DiscoveryStream, DiscoveryStreamPool},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -69,7 +70,7 @@ impl DiscoverySrvClientStd {
     pub fn with_factory<F, S>(mut self, scheme: &'static str, factory: F) -> Self
     where
         F: FnMut(&Url) -> anyhow::Result<S> + 'static,
-        S: Stream + 'static,
+        S: DiscoveryStream + 'static,
     {
         self.pool = self.pool.with_factory(scheme, factory);
         self
@@ -78,14 +79,24 @@ impl DiscoverySrvClientStd {
     /// Runs the three RFC 6186 SRV lookups (`_imap._tcp`,
     /// `_imaps._tcp`, `_submission._tcp`) on `domain` and returns
     /// the best record per service.
-    pub fn discover(&mut self, domain: &str) -> Result<SrvReport, DiscoverySrvClientStdError> {
+    pub fn discover(
+        &mut self,
+        domain: &str,
+    ) -> Result<DiscoverySrvReport, DiscoverySrvClientStdError> {
+        debug!("begin RFC 6186 SRV discovery");
+        trace!("domain: {domain}");
+
         let mut coroutine = DiscoverySrv::new(domain, self.dns.clone());
         let mut buf = [0u8; READ_BUFFER_SIZE];
         let mut arg: Option<&[u8]> = None;
 
         loop {
             match coroutine.resume(arg.take()) {
-                DiscoveryCoroutineState::Complete(Ok(report)) => return Ok(report),
+                DiscoveryCoroutineState::Complete(Ok(report)) => {
+                    debug!("end of RFC 6186 SRV discovery");
+                    trace!("{report:?}");
+                    return Ok(report);
+                }
                 DiscoveryCoroutineState::Complete(Err(err)) => return Err(err.into()),
                 DiscoveryCoroutineState::Yielded(DiscoveryYield::WantsRead { url }) => {
                     let stream = self.pool.get(&url)?;

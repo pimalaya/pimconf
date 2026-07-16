@@ -29,18 +29,19 @@ use std::io;
 
 use alloc::vec::Vec;
 
+use log::{debug, trace};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     autoconfig::{
+        config::DiscoveryAutoconfig,
         isp::{DiscoveryIsp, DiscoveryIspError},
         mailconf::{DiscoveryMailconf, DiscoveryMailconfError},
         mx::{DiscoveryDnsMx, DiscoveryDnsMxError, MxRecord},
-        types::Autoconfig,
     },
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    shared::pool::{DiscoveryStreamPool, Stream},
+    shared::pool::{DiscoveryStream, DiscoveryStreamPool},
 };
 
 const READ_BUFFER_SIZE: usize = 8 * 1024;
@@ -96,7 +97,7 @@ impl DiscoveryAutoconfigClientStd {
     pub fn with_factory<F, S>(mut self, scheme: &'static str, factory: F) -> Self
     where
         F: FnMut(&Url) -> anyhow::Result<S> + 'static,
-        S: Stream + 'static,
+        S: DiscoveryStream + 'static,
     {
         self.pool = self.pool.with_factory(scheme, factory);
         self
@@ -120,7 +121,10 @@ impl DiscoveryAutoconfigClientStd {
         local_part: &str,
         domain: &str,
         secure: bool,
-    ) -> Result<Autoconfig, DiscoveryAutoconfigClientStdError> {
+    ) -> Result<DiscoveryAutoconfig, DiscoveryAutoconfigClientStdError> {
+        debug!("begin autoconfig ISP main lookup");
+        trace!("local part: {local_part}, domain: {domain}, secure: {secure}");
+
         let url = DiscoveryIsp::main_url(local_part, domain, secure)?;
         self.run(DiscoveryIsp::new(url))
     }
@@ -131,7 +135,10 @@ impl DiscoveryAutoconfigClientStd {
         &mut self,
         domain: &str,
         secure: bool,
-    ) -> Result<Autoconfig, DiscoveryAutoconfigClientStdError> {
+    ) -> Result<DiscoveryAutoconfig, DiscoveryAutoconfigClientStdError> {
+        debug!("begin autoconfig ISP fallback lookup");
+        trace!("domain: {domain}, secure: {secure}");
+
         let url = DiscoveryIsp::fallback_url(domain, secure)?;
         self.run(DiscoveryIsp::new(url))
     }
@@ -142,7 +149,10 @@ impl DiscoveryAutoconfigClientStd {
         &mut self,
         domain: &str,
         secure: bool,
-    ) -> Result<Autoconfig, DiscoveryAutoconfigClientStdError> {
+    ) -> Result<DiscoveryAutoconfig, DiscoveryAutoconfigClientStdError> {
+        debug!("begin autoconfig ISPDB lookup");
+        trace!("domain: {domain}, secure: {secure}");
+
         let url = DiscoveryIsp::db_url(domain, secure)?;
         self.run(DiscoveryIsp::new(url))
     }
@@ -151,12 +161,18 @@ impl DiscoveryAutoconfigClientStd {
     /// preference (best first). Empty when the response carries no
     /// MX answers.
     pub fn mx(&mut self, domain: &str) -> Result<Vec<MxRecord>, DiscoveryAutoconfigClientStdError> {
+        debug!("begin autoconfig MX lookup");
+        trace!("domain: {domain}");
+
         self.run(DiscoveryDnsMx::new(domain, self.dns.clone()))
     }
 
     /// Looks up the `mailconf=<URL>` TXT record on `domain` and
     /// returns the parsed redirect URL.
     pub fn mailconf(&mut self, domain: &str) -> Result<Url, DiscoveryAutoconfigClientStdError> {
+        debug!("begin autoconfig mailconf lookup");
+        trace!("domain: {domain}");
+
         self.run(DiscoveryMailconf::new(domain, self.dns.clone()))
     }
 

@@ -18,5 +18,6 @@ pub mod discover;
 pub mod resolve;
 pub mod srv;
 pub mod txt;
-pub mod types;
 pub mod well_known;
+
+pub mod service;

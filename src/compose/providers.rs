@@ -11,19 +11,22 @@ use alloc::{format, string::ToString, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
-use crate::compose::types::{
-    ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint, Security,
+use crate::compose::config::{
+    DiscoveryAuthMethod, DiscoveryConfigSource, DiscoveryEndpoint, DiscoverySecurity,
+    DiscoveryService, DiscoveryServiceConfig,
 };
 
 /// A provider covered by a fixed rule.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum Provider {
+pub enum DiscoveryKnownProvider {
+    /// Google (Gmail, Google Workspace).
     Google,
+    /// Microsoft (Outlook.com, Microsoft 365, Exchange Online).
     Microsoft,
 }
 
-impl Provider {
+impl DiscoveryKnownProvider {
     /// Matches a provider from an email domain.
     pub fn from_domain(domain: &str) -> Option<Self> {
         let google = ["gmail.com", "googlemail.com"];
@@ -74,7 +77,7 @@ impl Provider {
 }
 
 fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
-    let source = ConfigSource::Provider(Provider::Google);
+    let source = DiscoveryConfigSource::Provider(DiscoveryKnownProvider::Google);
 
     // NOTE: no device authorization grant: Google's device flow
     // restricts scopes to an allowlist that excludes Gmail, Calendar
@@ -100,10 +103,10 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
     vec![
         DiscoveryServiceConfig {
             service: DiscoveryService::Imap,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "imap.gmail.com".to_string(),
                 port: 993,
-                security: Security::Tls,
+                security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
             auth: mail_auth.clone(),
@@ -111,10 +114,10 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Pop3,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "pop.gmail.com".to_string(),
                 port: 995,
-                security: Security::Tls,
+                security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
             auth: mail_auth.clone(),
@@ -122,10 +125,10 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Smtp,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "smtp.gmail.com".to_string(),
                 port: 465,
-                security: Security::Tls,
+                security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
             auth: mail_auth,
@@ -133,7 +136,7 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Caldav,
-            endpoint: Endpoint::Http(format!(
+            endpoint: DiscoveryEndpoint::Http(format!(
                 "https://apidata.googleusercontent.com/caldav/v2/{email}/user"
             )),
             username: Some(email.to_string()),
@@ -142,7 +145,7 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Carddav,
-            endpoint: Endpoint::Http(format!(
+            endpoint: DiscoveryEndpoint::Http(format!(
                 "https://www.googleapis.com/carddav/v1/principals/{email}/"
             )),
             username: Some(email.to_string()),
@@ -153,7 +156,7 @@ fn google_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
 }
 
 fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
-    let source = ConfigSource::Provider(Provider::Microsoft);
+    let source = DiscoveryConfigSource::Provider(DiscoveryKnownProvider::Microsoft);
 
     // NOTE: no password: Exchange Online retired basic
     // authentication. No CalDAV/CardDAV either: Exchange exposes
@@ -178,10 +181,10 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
     vec![
         DiscoveryServiceConfig {
             service: DiscoveryService::Imap,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "outlook.office365.com".to_string(),
                 port: 993,
-                security: Security::Tls,
+                security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
             auth: auth("https://outlook.office365.com/IMAP.AccessAsUser.All"),
@@ -189,10 +192,10 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Pop3,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "outlook.office365.com".to_string(),
                 port: 995,
-                security: Security::Tls,
+                security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
             auth: auth("https://outlook.office365.com/POP.AccessAsUser.All"),
@@ -200,10 +203,10 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
         },
         DiscoveryServiceConfig {
             service: DiscoveryService::Smtp,
-            endpoint: Endpoint::Tcp {
+            endpoint: DiscoveryEndpoint::Tcp {
                 host: "smtp.office365.com".to_string(),
                 port: 587,
-                security: Security::Starttls,
+                security: DiscoverySecurity::Starttls,
             },
             username: Some(email.to_string()),
             auth: auth("https://outlook.office365.com/SMTP.Send"),

@@ -15,11 +15,11 @@ use pimalaya_stream::tls::Tls;
 use crate::{
     compose::{
         client::DiscoveryComposeClientStd,
-        providers::Provider,
-        types::{
-            ConfigSource, DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig, Endpoint,
-            Security,
+        config::{
+            DiscoveryAuthMethod, DiscoveryConfigSource, DiscoveryEndpoint, DiscoverySecurity,
+            DiscoveryService, DiscoveryServiceConfig,
         },
+        providers::DiscoveryKnownProvider,
     },
     shared::dns::{DNS_SERVER, resolver_url},
 };
@@ -129,21 +129,21 @@ pub fn service_name(service: DiscoveryService) -> &'static str {
     }
 }
 
-fn endpoint_label(endpoint: &Endpoint) -> String {
+fn endpoint_label(endpoint: &DiscoveryEndpoint) -> String {
     match endpoint {
-        Endpoint::Tcp {
+        DiscoveryEndpoint::Tcp {
             host,
             port,
             security,
         } => {
             let security = match security {
-                Security::Plain => "plain",
-                Security::Starttls => "STARTTLS",
-                Security::Tls => "SSL",
+                DiscoverySecurity::Plain => "plain",
+                DiscoverySecurity::Starttls => "STARTTLS",
+                DiscoverySecurity::Tls => "SSL",
             };
             format!("{host}:{port} ({security})")
         }
-        Endpoint::Http(url) => url.clone(),
+        DiscoveryEndpoint::Http(url) => url.clone(),
     }
 }
 
@@ -169,17 +169,17 @@ fn auth_label(methods: &[DiscoveryAuthMethod]) -> String {
         .join(", ")
 }
 
-fn source_name(source: ConfigSource) -> &'static str {
+fn source_name(source: DiscoveryConfigSource) -> &'static str {
     match source {
-        ConfigSource::Provider(Provider::Google) => "provider:google",
-        ConfigSource::Provider(Provider::Microsoft) => "provider:microsoft",
-        ConfigSource::Pacc => "pacc",
-        ConfigSource::IspMain => "isp",
-        ConfigSource::IspFallback => "isp-fallback",
-        ConfigSource::Mailconf => "mailconf",
-        ConfigSource::Ispdb => "ispdb",
-        ConfigSource::Srv => "srv",
-        ConfigSource::Dav => "dav",
-        ConfigSource::Jmap => "jmap",
+        DiscoveryConfigSource::Provider(DiscoveryKnownProvider::Google) => "provider:google",
+        DiscoveryConfigSource::Provider(DiscoveryKnownProvider::Microsoft) => "provider:microsoft",
+        DiscoveryConfigSource::Pacc => "pacc",
+        DiscoveryConfigSource::IspMain => "isp",
+        DiscoveryConfigSource::IspFallback => "isp-fallback",
+        DiscoveryConfigSource::Mailconf => "mailconf",
+        DiscoveryConfigSource::Ispdb => "ispdb",
+        DiscoveryConfigSource::Srv => "srv",
+        DiscoveryConfigSource::Dav => "dav",
+        DiscoveryConfigSource::Jmap => "jmap",
     }
 }

@@ -11,7 +11,7 @@
 //!    record whose decoded `d` digest constant-time matches a SHA-256
 //!    of the raw HTTP body wins.
 //! 3. Once a record matches, parse the raw bytes as JSON and yield
-//!    the resulting [`PaccConfig`].
+//!    the resulting [`DiscoveryPaccConfig`].
 //!
 //! Per RFC 1035 §3.3.14 a TXT record is a sequence of length-prefixed
 //! character-strings. Long values get split across multiple
@@ -43,7 +43,7 @@ use url::{ParseError, Url};
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    pacc::types::PaccConfig,
+    pacc::config::DiscoveryPaccConfig,
     shared::{
         dns::{DiscoveryDnsTxt, DiscoveryDnsTxtError},
         http::{DiscoveryHttpGet, DiscoveryHttpGetError},
@@ -53,15 +53,24 @@ use crate::{
 /// Errors that can occur during a single PACC discovery.
 #[derive(Debug, Error)]
 pub enum DiscoveryPaccError {
+    /// The constructed well-known URL is not a valid URL.
     #[error("PACC URL for domain `{1}` is not valid")]
     InvalidUrl(#[source] ParseError, String),
+    /// No `_ua-auto-config` TXT record whose digest matched the
+    /// fetched configuration body was found.
     #[error("no `_ua-auto-config` TXT record matched the configuration body")]
     NoValidTxtRecord,
+    /// The body passed digest verification but could not be parsed as
+    /// a valid PACC JSON document.
     #[error("PACC body matched the published digest but is not valid JSON")]
     Json(#[source] serde_json::Error),
 
+    /// An error occurred during the HTTPS fetch of the well-known
+    /// configuration document.
     #[error(transparent)]
     Http(#[from] DiscoveryHttpGetError),
+    /// An error occurred during the DNS TXT lookup for the digest
+    /// record.
     #[error(transparent)]
     Dns(#[from] DiscoveryDnsTxtError),
 }
@@ -111,7 +120,7 @@ impl DiscoveryPacc {
 
 impl DiscoveryCoroutine for DiscoveryPacc {
     type Yield = DiscoveryYield;
-    type Return = Result<PaccConfig, DiscoveryPaccError>;
+    type Return = Result<DiscoveryPaccConfig, DiscoveryPaccError>;
 
     fn resume(
         &mut self,

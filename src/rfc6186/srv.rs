@@ -46,14 +46,19 @@ pub type SrvRecord = Record<RevNameBuf, Box<Srv>>;
 /// Errors that can occur during a single DNS SRV exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryDnsSrvError {
+    /// The fully-qualified query name is not a valid DNS name.
     #[error("DNS SRV qname `{1}` is not a valid name")]
     InvalidQname(#[source] NameParseError, String),
+    /// The serialised DNS query exceeded the fixed query buffer.
     #[error("DNS SRV query did not fit in the {DNS_QUERY_BUF_SIZE}-byte buffer")]
     QueryTooLarge(#[source] MessageBuildError),
+    /// The DNS response message could not be parsed.
     #[error("DNS SRV response could not be parsed")]
     InvalidResponse(String),
+    /// The DNS stream closed before a complete response was received.
     #[error("DNS SRV stream reached EOF before a full response")]
     Eof,
+    /// The underlying DNS exchange coroutine failed.
     #[error("DNS SRV exchange failed")]
     Exchange(#[source] DiscoveryDnsExchangeError),
 }

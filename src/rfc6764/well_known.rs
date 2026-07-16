@@ -12,6 +12,8 @@
 //! per-user principal walk that needs credentials lives in the WebDAV
 //! client, not here.
 
+use alloc::boxed::Box;
+
 use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
     rfc8615::well_known::{Http11WellKnown, Http11WellKnownError},
@@ -22,12 +24,13 @@ use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    rfc6764::types::DiscoveryDavService,
+    rfc6764::service::DiscoveryDavService,
 };
 
 /// Errors emitted by [`DiscoveryWellKnown`].
 #[derive(Debug, Error)]
 pub enum DiscoveryWellKnownError {
+    /// The underlying HTTP well-known request or response failed.
     #[error(transparent)]
     Http(#[from] Http11WellKnownError),
 }
@@ -47,7 +50,7 @@ impl DiscoveryWellKnown {
     pub fn new(origin: Url, service: DiscoveryDavService) -> Self {
         let state = match Http11WellKnown::prepare_request(origin.as_str(), service.service_name())
         {
-            Ok(request) => State::Probe(Http11WellKnown::new(request)),
+            Ok(request) => State::Probe(Box::new(Http11WellKnown::new(request))),
             Err(err) => State::Failed(Some(err.into())),
         };
 
@@ -101,6 +104,6 @@ impl DiscoveryCoroutine for DiscoveryWellKnown {
 }
 
 enum State {
-    Probe(Http11WellKnown),
+    Probe(Box<Http11WellKnown>),
     Failed(Option<DiscoveryWellKnownError>),
 }

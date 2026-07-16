@@ -75,10 +75,13 @@ pub(crate) const DNS_QUERY_BUF_SIZE: usize = 4 * 1024;
 /// Errors that can occur during a single DNS message exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryDnsExchangeError {
+    /// The stream reached EOF before a full DNS response arrived.
     #[error("DNS stream reached EOF before a full response")]
     Eof,
+    /// The DNS-over-HTTPS POST exchange failed at the HTTP layer.
     #[error("DNS-over-HTTPS exchange failed")]
     Http(#[source] Http11SendError),
+    /// The DNS-over-HTTPS resolver answered with a non-2xx status.
     #[error("DNS-over-HTTPS resolver answered HTTP {0}")]
     HttpStatus(u16),
 }
@@ -103,7 +106,7 @@ enum ExchangeState {
     /// prefix and full body are present.
     TcpRead(Vec<u8>),
     /// DNS-over-HTTPS transport: one POST exchange.
-    Http(Http11Send),
+    Http(Box<Http11Send>),
     /// `Complete` has already been returned.
     #[default]
     Done,
@@ -124,7 +127,7 @@ impl DiscoveryDnsExchange {
                 .header("Content-Type", "application/dns-message")
                 .header("Accept", "application/dns-message");
 
-                ExchangeState::Http(Http11Send::new(request))
+                ExchangeState::Http(Box::new(Http11Send::new(request)))
             }
             _ => {
                 let mut framed = Vec::with_capacity(2 + message.len());
@@ -226,14 +229,19 @@ pub type TxtRecord = Record<RevNameBuf, Box<Txt>>;
 /// Errors that can occur during a single DNS TXT exchange.
 #[derive(Debug, Error)]
 pub enum DiscoveryDnsTxtError {
+    /// The queried domain is not a valid DNS name.
     #[error("DNS TXT domain `{1}` is not a valid name")]
     InvalidDomain(#[source] NameParseError, String),
+    /// The built query did not fit in the fixed query buffer.
     #[error("DNS TXT query did not fit in the {DNS_QUERY_BUF_SIZE}-byte buffer")]
     QueryTooLarge(#[source] MessageBuildError),
+    /// The TXT response could not be parsed.
     #[error("DNS TXT response could not be parsed")]
     InvalidResponse(String),
+    /// The stream reached EOF before a full response arrived.
     #[error("DNS TXT stream reached EOF before a full response")]
     Eof,
+    /// The underlying DNS message exchange failed.
     #[error("DNS TXT exchange failed")]
     Exchange(#[source] DiscoveryDnsExchangeError),
 }

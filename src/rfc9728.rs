@@ -107,14 +107,26 @@ pub fn challenge_resource_metadata(value: &str) -> Option<Url> {
 /// Errors emitted by [`DiscoveryOauthResourceResolve`].
 #[derive(Debug, Error)]
 pub enum DiscoveryOauthResourceResolveError {
+    /// Sending the HTTP metadata request failed.
     #[error(transparent)]
     SendHttpFetch(#[from] Http11SendError),
+    /// The metadata JSON response could not be parsed.
     #[error(transparent)]
     ParseHttpResponse(#[from] serde_json::Error),
+    /// The metadata endpoint answered with an unexpected redirect.
     #[error("Unexpected redirection {code} to {url}")]
-    Redirect { url: Url, code: u16 },
+    Redirect {
+        /// Location the server redirected to.
+        url: Url,
+        /// HTTP status code of the redirect response.
+        code: u16,
+    },
+    /// The metadata endpoint answered with an unexpected status.
     #[error("Unexpected status {code} fetching resource metadata")]
-    Status { code: u16 },
+    Status {
+        /// HTTP status code returned.
+        code: u16,
+    },
 }
 
 /// I/O-free coroutine that GETs a protected resource's metadata URL

@@ -5,7 +5,7 @@
 //! `_carddav._tcp.<domain>`, `_carddavs._tcp.<domain>`) in series,
 //! picks the best record per service (lowest priority, highest weight
 //! on ties; already sorted by [`DiscoveryDnsSrv`]), and yields a
-//! single [`WebdavSrvReport`] when all four steps have completed.
+//! single [`DiscoveryWebdavSrvReport`] when all four steps have completed.
 //!
 //! A per-service DNS failure (`InvalidQname`, `QueryTooLarge`,
 //! `InvalidResponse`) terminates the whole coroutine with
@@ -24,22 +24,26 @@ use url::Url;
 
 use crate::{
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
-    rfc6186::types::SrvService,
+    rfc6186::service::DiscoverySrvService,
     rfc6764::{
+        service::DiscoveryWebdavSrvReport,
         srv::{DiscoveryDnsSrv, DiscoveryDnsSrvError, SrvRecord},
-        types::WebdavSrvReport,
     },
 };
 
 /// Errors emitted by [`DiscoveryWebdavSrv`].
 #[derive(Debug, Error)]
 pub enum DiscoveryWebdavSrvError {
+    /// The `_caldav._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_caldav._tcp` failed: {0}")]
     Caldav(#[source] DiscoveryDnsSrvError),
+    /// The `_caldavs._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_caldavs._tcp` failed: {0}")]
     Caldavs(#[source] DiscoveryDnsSrvError),
+    /// The `_carddav._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_carddav._tcp` failed: {0}")]
     Carddav(#[source] DiscoveryDnsSrvError),
+    /// The `_carddavs._tcp` SRV lookup failed with a DNS-level error.
     #[error("DNS SRV lookup for `_carddavs._tcp` failed: {0}")]
     Carddavs(#[source] DiscoveryDnsSrvError),
 }
@@ -55,12 +59,12 @@ enum State {
 }
 
 /// I/O-free combined coroutine that runs the four RFC 6764 SRV
-/// queries and assembles their best records into a [`WebdavSrvReport`].
+/// queries and assembles their best records into a [`DiscoveryWebdavSrvReport`].
 pub struct DiscoveryWebdavSrv {
     state: State,
     domain: String,
     resolver: Url,
-    report: WebdavSrvReport,
+    report: DiscoveryWebdavSrvReport,
 }
 
 impl DiscoveryWebdavSrv {
@@ -76,14 +80,14 @@ impl DiscoveryWebdavSrv {
             state: State::Caldav(caldav),
             domain,
             resolver,
-            report: WebdavSrvReport::default(),
+            report: DiscoveryWebdavSrvReport::default(),
         }
     }
 }
 
 impl DiscoveryCoroutine for DiscoveryWebdavSrv {
     type Yield = DiscoveryYield;
-    type Return = Result<WebdavSrvReport, DiscoveryWebdavSrvError>;
+    type Return = Result<DiscoveryWebdavSrvReport, DiscoveryWebdavSrvError>;
 
     fn resume(&mut self, arg: Option<&[u8]>) -> DiscoveryCoroutineState<Self::Yield, Self::Return> {
         match mem::take(&mut self.state) {
@@ -156,8 +160,8 @@ impl DiscoveryCoroutine for DiscoveryWebdavSrv {
     }
 }
 
-fn into_service(record: SrvRecord) -> SrvService {
-    SrvService {
+fn into_service(record: SrvRecord) -> DiscoverySrvService {
+    DiscoverySrvService {
         host: record
             .rdata
             .name

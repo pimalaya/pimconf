@@ -4,4 +4,5 @@
 pub mod client;
 pub mod discover;
 pub mod srv;
-pub mod types;
+
+pub mod service;

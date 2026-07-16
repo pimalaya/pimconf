@@ -10,7 +10,7 @@
 
 use alloc::{collections::BTreeSet, vec::Vec};
 
-use crate::compose::types::{DiscoveryService, DiscoveryServiceConfig};
+use crate::compose::config::{DiscoveryService, DiscoveryServiceConfig};
 
 /// Pure accumulator reducing per-mechanism config lists into one
 /// deduplicated list.

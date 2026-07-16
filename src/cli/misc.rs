@@ -18,7 +18,7 @@ use url::Url;
 
 use crate::{
     cli::common::{ServerArg, table},
-    compose::types::{DiscoveryService, DiscoveryServiceConfig},
+    compose::config::{DiscoveryService, DiscoveryServiceConfig},
     rfc8414::DiscoveryOauthServerMetadata,
     rfc9728::DiscoveryOauthResourceMetadata,
 };
@@ -32,11 +32,13 @@ use crate::{
 pub struct AllCommand {
     /// Email address to discover configs for.
     pub email: String,
+    /// DNS resolver URL or `host:port` pair (defaults to `1.1.1.1:53`).
     #[command(flatten)]
     pub server: ServerArg,
 }
 
 impl AllCommand {
+    /// Runs all discovery mechanisms and prints the results by domain.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let client = self.server.client(tls)?;
         let configs = client.compose_raw(&self.email, BTreeSet::new())?;
@@ -59,16 +61,19 @@ pub enum AuthCommand {
     Resource(AuthArgs),
 }
 
+/// URL argument shared by all `auth` subcommands.
 #[derive(Debug, Args)]
 pub struct AuthArgs {
     /// URL to probe: an HTTP endpoint (`http`), an OAuth issuer
     /// (`server`), or a protected resource (`resource`).
     pub url: Url,
+    /// DNS resolver URL or `host:port` pair (defaults to `1.1.1.1:53`).
     #[command(flatten)]
     pub server: ServerArg,
 }
 
 impl AuthCommand {
+    /// Runs the selected subcommand and prints the authentication result.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         match self {
             Self::Http(args) => {

@@ -132,14 +132,26 @@ pub(crate) fn insert_well_known(url: &Url, well_known: &str) -> Url {
 /// Errors emitted by [`DiscoveryOauthServerResolve`].
 #[derive(Debug, Error)]
 pub enum DiscoveryOauthServerResolveError {
+    /// Sending the HTTP metadata request failed.
     #[error(transparent)]
     SendHttpFetch(#[from] Http11SendError),
+    /// The metadata JSON response could not be parsed.
     #[error(transparent)]
     ParseHttpResponse(#[from] serde_json::Error),
+    /// The metadata endpoint answered with an unexpected redirect.
     #[error("Unexpected redirection {code} to {url}")]
-    Redirect { url: Url, code: u16 },
+    Redirect {
+        /// Location the server redirected to.
+        url: Url,
+        /// HTTP status code of the redirect response.
+        code: u16,
+    },
+    /// The metadata endpoint answered with an unexpected status.
     #[error("Unexpected status {code} fetching server metadata")]
-    Status { code: u16 },
+    Status {
+        /// HTTP status code returned.
+        code: u16,
+    },
 }
 
 /// I/O-free coroutine that GETs an authorization server's well-known

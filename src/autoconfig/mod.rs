@@ -5,4 +5,5 @@ pub mod client;
 pub mod isp;
 pub mod mailconf;
 pub mod mx;
-pub mod types;
+
+pub mod config;

@@ -30,16 +30,16 @@ use url::Url;
 
 #[cfg(feature = "autoconfig")]
 use crate::autoconfig::{isp::DiscoveryIsp, mailconf::DiscoveryMailconf, mx::DiscoveryDnsMx};
-#[cfg(feature = "autoconfig")]
-use crate::compose::types::ConfigSource;
 #[cfg(feature = "rfc8414")]
-use crate::compose::types::DiscoveryAuthMethod;
+use crate::compose::config::DiscoveryAuthMethod;
+#[cfg(feature = "autoconfig")]
+use crate::compose::config::DiscoveryConfigSource;
 #[cfg(feature = "pacc")]
 use crate::pacc::discover::DiscoveryPacc;
 #[cfg(feature = "rfc6186")]
 use crate::rfc6186::discover::DiscoverySrv;
 #[cfg(feature = "rfc6764")]
-use crate::rfc6764::{resolve::DiscoveryDavResolve, types::DiscoveryDavService};
+use crate::rfc6764::{resolve::DiscoveryDavResolve, service::DiscoveryDavService};
 #[cfg(feature = "rfc8414")]
 use crate::rfc8414::{DiscoveryOauthServerMetadata, DiscoveryOauthServerResolve};
 #[cfg(feature = "rfc8620")]
@@ -51,8 +51,8 @@ use crate::rfc9728::{DiscoveryOauthResourceMetadata, DiscoveryOauthResourceResol
 use crate::{
     compose::{
         collect::DiscoveryConfigCollector,
-        providers::Provider,
-        types::{DiscoveryService, DiscoveryServiceConfig},
+        config::{DiscoveryService, DiscoveryServiceConfig},
+        providers::DiscoveryKnownProvider,
     },
     coroutine::{DiscoveryCoroutine, DiscoveryCoroutineState, DiscoveryYield},
     shared::pool::DiscoveryStreamPool,
@@ -142,7 +142,7 @@ impl DiscoveryComposeClientStd {
     /// (domain rule or MX records), otherwise empty.
     pub fn is_google(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         match self.detect_provider(email) {
-            Some(Provider::Google) => Provider::Google.configs(email),
+            Some(DiscoveryKnownProvider::Google) => DiscoveryKnownProvider::Google.configs(email),
             _ => Vec::new(),
         }
     }
@@ -151,7 +151,9 @@ impl DiscoveryComposeClientStd {
     /// Microsoft-hosted (domain rule or MX records), otherwise empty.
     pub fn is_microsoft(&self, email: &str) -> Vec<DiscoveryServiceConfig> {
         match self.detect_provider(email) {
-            Some(Provider::Microsoft) => Provider::Microsoft.configs(email),
+            Some(DiscoveryKnownProvider::Microsoft) => {
+                DiscoveryKnownProvider::Microsoft.configs(email)
+            }
             _ => Vec::new(),
         }
     }
@@ -296,7 +298,7 @@ impl DiscoveryComposeClientStd {
         // MX-based provider detection is pointless and skipped.
         let mut outputs: Vec<Vec<DiscoveryServiceConfig>> = Vec::new();
 
-        let provider = Provider::from_domain(&domain);
+        let provider = DiscoveryKnownProvider::from_domain(&domain);
         if let Some(provider) = provider {
             debug!("email domain matched a fixed provider rule");
             trace!("{domain} -> {provider:?}");
@@ -505,15 +507,15 @@ impl DiscoveryComposeClientStd {
 
     /// Detects the fixed provider hosting `email`: the domain rule
     /// first, then MX-based detection. `None` when neither matches.
-    fn detect_provider(&self, email: &str) -> Option<Provider> {
+    fn detect_provider(&self, email: &str) -> Option<DiscoveryKnownProvider> {
         let domain = domain_part(email);
-        Provider::from_domain(&domain).or_else(|| self.provider_from_mx(&domain))
+        DiscoveryKnownProvider::from_domain(&domain).or_else(|| self.provider_from_mx(&domain))
     }
 
     /// Looks up `domain`'s MX records and returns the first fixed
     /// provider (Google Workspace, Microsoft 365) they match.
     #[cfg(feature = "autoconfig")]
-    fn provider_from_mx(&self, domain: &str) -> Option<Provider> {
+    fn provider_from_mx(&self, domain: &str) -> Option<DiscoveryKnownProvider> {
         let mx = DiscoveryDnsMx::new(domain, self.dns.clone());
 
         let records = match run(&mut self.pool(), mx) {
@@ -528,7 +530,7 @@ impl DiscoveryComposeClientStd {
         for record in records {
             let exchange = record.rdata.exchange.to_string();
 
-            if let Some(provider) = Provider::from_mx(&exchange) {
+            if let Some(provider) = DiscoveryKnownProvider::from_mx(&exchange) {
                 debug!("MX record matched a fixed provider rule");
                 trace!("{exchange} -> {provider:?}");
                 return Some(provider);
@@ -550,7 +552,7 @@ impl DiscoveryComposeClientStd {
     /// No-op stubs when `autoconfig` (which owns the MX coroutine) is
     /// off: provider detection falls back to the pure domain rule.
     #[cfg(not(feature = "autoconfig"))]
-    fn provider_from_mx(&self, _domain: &str) -> Option<Provider> {
+    fn provider_from_mx(&self, _domain: &str) -> Option<DiscoveryKnownProvider> {
         None
     }
 
@@ -588,7 +590,7 @@ impl DiscoveryComposeClientStd {
     #[cfg(feature = "autoconfig")]
     fn run_isp_main(&self, local: &str, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::main_url(local, domain, true) {
-            Ok(url) => self.run_isp(url, email, ConfigSource::IspMain),
+            Ok(url) => self.run_isp(url, email, DiscoveryConfigSource::IspMain),
             Err(err) => {
                 debug!("skip autoconfig ISP main URL");
                 trace!("{err:?}");
@@ -600,7 +602,7 @@ impl DiscoveryComposeClientStd {
     #[cfg(feature = "autoconfig")]
     fn run_isp_fallback(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::fallback_url(domain, true) {
-            Ok(url) => self.run_isp(url, email, ConfigSource::IspFallback),
+            Ok(url) => self.run_isp(url, email, DiscoveryConfigSource::IspFallback),
             Err(err) => {
                 debug!("skip autoconfig ISP fallback URL");
                 trace!("{err:?}");
@@ -612,7 +614,7 @@ impl DiscoveryComposeClientStd {
     #[cfg(feature = "autoconfig")]
     fn run_ispdb(&self, domain: &str, email: &str) -> Vec<DiscoveryServiceConfig> {
         match DiscoveryIsp::db_url(domain, true) {
-            Ok(url) => self.run_isp(url, email, ConfigSource::Ispdb),
+            Ok(url) => self.run_isp(url, email, DiscoveryConfigSource::Ispdb),
             Err(err) => {
                 debug!("skip autoconfig ISPDB URL");
                 trace!("{err:?}");
@@ -630,7 +632,7 @@ impl DiscoveryComposeClientStd {
             Ok(url) => {
                 debug!("follow mailconf TXT redirect");
                 trace!("{url}");
-                self.run_isp(url, email, ConfigSource::Mailconf)
+                self.run_isp(url, email, DiscoveryConfigSource::Mailconf)
             }
             Err(err) => {
                 debug!("skip mailconf TXT redirect");
@@ -641,7 +643,12 @@ impl DiscoveryComposeClientStd {
     }
 
     #[cfg(feature = "autoconfig")]
-    fn run_isp(&self, url: Url, email: &str, source: ConfigSource) -> Vec<DiscoveryServiceConfig> {
+    fn run_isp(
+        &self,
+        url: Url,
+        email: &str,
+        source: DiscoveryConfigSource,
+    ) -> Vec<DiscoveryServiceConfig> {
         match run(&mut self.pool(), DiscoveryIsp::new(url)) {
             Ok(config) => DiscoveryServiceConfig::from_autoconfig(&config, email, source),
             Err(err) => {

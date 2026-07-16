@@ -13,9 +13,9 @@ use crate::{
     cli::common::{CALENDAR, CONTACT, ConfigsOutput, EMAIL, FILE, ServerArg, only},
     compose::{
         client::DiscoveryComposeClientStd,
-        types::{DiscoveryService, DiscoveryServiceConfig},
+        config::{DiscoveryService, DiscoveryServiceConfig},
     },
-    rfc6764::types::DiscoveryDavService,
+    rfc6764::service::DiscoveryDavService,
 };
 
 /// Discover email services (IMAP, POP3, SMTP, JMAP, ManageSieve).
@@ -77,6 +77,7 @@ pub enum ContactCommand {
 pub struct EmailArgs {
     /// Email address to discover configs for.
     pub email: String,
+    /// DNS resolver URL or `host:port` pair (defaults to `1.1.1.1:53`).
     #[command(flatten)]
     pub server: ServerArg,
 }
@@ -86,11 +87,13 @@ pub struct EmailArgs {
 pub struct DomainArgs {
     /// Domain to discover configs for.
     pub domain: String,
+    /// DNS resolver URL or `host:port` pair (defaults to `1.1.1.1:53`).
     #[command(flatten)]
     pub server: ServerArg,
 }
 
 impl EmailCommand {
+    /// Runs the selected subcommand and prints the resulting configs.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let configs = match self {
             Self::First(args) => {
@@ -128,6 +131,7 @@ impl EmailCommand {
 }
 
 impl FileCommand {
+    /// Runs the selected subcommand and prints the resulting configs.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let configs = match self {
             // PACC is the only mechanism advertising WebDAV, so `first`
@@ -143,6 +147,7 @@ impl FileCommand {
 }
 
 impl CalendarCommand {
+    /// Runs the selected subcommand and prints the resulting configs.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let configs = match self {
             Self::First(args) => {
@@ -171,6 +176,7 @@ impl CalendarCommand {
 }
 
 impl ContactCommand {
+    /// Runs the selected subcommand and prints the resulting configs.
     pub fn execute(self, printer: &mut impl Printer, tls: &Tls) -> Result<()> {
         let configs = match self {
             Self::First(args) => {
