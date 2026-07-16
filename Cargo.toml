@@ -83,7 +83,3 @@ resolv-conf = { version = "0.7", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = { version = "0.3", optional = true }
-
-[patch.crates-io]
-# TODO: drop the patch once the domain new API is released on crates.io.
-domain = { git = "https://github.com/nlnetlabs/domain", rev = "d89a2827e2fcbaffc7b7b3ecb17366c6b3819ec8" }
