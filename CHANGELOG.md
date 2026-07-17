@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the Microsoft IMAP/POP/SMTP OAuth scopes to use the `https://outlook.office.com/` resource instead of `https://outlook.office365.com/`. The latter is the server host, not a valid scope resource, so Microsoft's authorize endpoint rejected it with `invalid_scope` ("The provided resource value for the input parameter 'scope' is not valid"). The server hosts (`outlook.office365.com`, `smtp.office365.com`) are unchanged.
+
 ## [0.3.2] - 2026-07-16
 
 ### Fixed

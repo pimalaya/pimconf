@@ -187,7 +187,7 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
                 security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
-            auth: auth("https://outlook.office365.com/IMAP.AccessAsUser.All"),
+            auth: auth("https://outlook.office.com/IMAP.AccessAsUser.All"),
             source,
         },
         DiscoveryServiceConfig {
@@ -198,7 +198,7 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
                 security: DiscoverySecurity::Tls,
             },
             username: Some(email.to_string()),
-            auth: auth("https://outlook.office365.com/POP.AccessAsUser.All"),
+            auth: auth("https://outlook.office.com/POP.AccessAsUser.All"),
             source,
         },
         DiscoveryServiceConfig {
@@ -209,7 +209,7 @@ fn microsoft_configs(email: &str) -> Vec<DiscoveryServiceConfig> {
                 security: DiscoverySecurity::Starttls,
             },
             username: Some(email.to_string()),
-            auth: auth("https://outlook.office365.com/SMTP.Send"),
+            auth: auth("https://outlook.office.com/SMTP.Send"),
             source,
         },
     ]
